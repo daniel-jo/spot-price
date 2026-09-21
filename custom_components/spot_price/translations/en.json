@@ -1,0 +1,46 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Spot Price",
+        "description": "Fetch hourly spot prices from eupowerprices.com for a bidding zone. Pick an area from the list, or type your own. An eupowerprices API key is optional but recommended: with it the integration uses the official /v1 API instead of the public markets endpoint.",
+        "data": {
+          "area": "Area / bidding zone",
+          "currency": "Currency",
+          "name": "Name (optional)",
+          "api_key": "API key (optional)",
+          "forecast_days": "Forecast period (days)"
+        }
+      }
+    },
+    "error": {
+      "invalid_area_code": "That is not a valid area code. Examples: SE1, NO2, DK1.",
+      "unknown_area": "The API does not know that area code. Pick one from the list, or check which areas your key can access."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Spot Price options",
+        "description": "Convert EUR/MWh to your end-user price per kWh (in your currency) and tune the cheap-window logic. The area can be changed here too. Leave the API key empty to use the public markets endpoint.",
+        "data": {
+          "area": "Area / bidding zone",
+          "currency": "Currency",
+          "api_key": "API key (empty = public API)",
+          "fx_mode": "FX rate mode",
+          "fixed_fx": "Fixed EUR→your-currency rate",
+          "vat_pct": "VAT %",
+          "grid_fee_sek_kwh": "Grid fee (per kWh, in your currency)",
+          "window_hours": "Cheapest window (hours)",
+          "low_price_threshold_sek": "Low price threshold (per kWh, in your currency)",
+          "update_interval_minutes": "Update interval (minutes)",
+          "forecast_days": "Forecast period (days)"
+        }
+      }
+    },
+    "error": {
+      "invalid_area_code": "That is not a valid area code. Examples: SE1, NO2, DK1.",
+      "unknown_area": "The API does not know that area code. Pick one from the list, or check which areas your key can access."
+    }
+  }
+}

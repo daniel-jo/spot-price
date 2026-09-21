@@ -1,0 +1,96 @@
+# ---------------------------------------------------------------------------
+# Example automations for the Spot Price custom integration.
+#
+# Entity IDs use a <AREA> placeholder — replace it with your configured area
+# (e.g. SE1–SE4, NO2, DK1) and swap in your own switch/fan/notify targets
+# below.
+# ---------------------------------------------------------------------------
+
+# 1) Keep prices fresh: refresh right after the day-ahead publication and a
+#    couple of times during the evening. `homeassistant.update_entity` on any
+#    spot_price sensor refreshes the whole integration.
+- id: spot_price_refresh_daily
+  alias: "Prices: Refresh after day-ahead publication"
+  trigger:
+    - platform: time
+      at:
+        - "13:20:00"
+        - "15:30:00"
+        - "20:00:00"
+  action:
+    - service: homeassistant.update_entity
+      target:
+        entity_id: sensor.spot_price_<AREA>_last_update
+  mode: single
+
+# 2) EV charger: charge during today's cheapest window. When a new cheapest
+#    window becomes available the automation waits for its start time,
+#    switches the charger on, then off again at window end.
+- id: ev_charge_cheapest_window_today
+  alias: "EV: Charge during today's cheapest window"
+  trigger:
+    - platform: state
+      entity_id: sensor.spot_price_<AREA>_cheapest_window_today
+      not_to:
+        - unknown
+        - unavailable
+  variables:
+    w_start: "{{ state_attr('sensor.spot_price_<AREA>_cheapest_window_today', 'start') }}"
+    w_end: "{{ state_attr('sensor.spot_price_<AREA>_cheapest_window_today', 'end') }}"
+  condition:
+    - condition: template
+      value_template: "{{ w_start is not none and w_end is not none }}"
+  action:
+    - wait_for_trigger:
+        - platform: template
+          value_template: "{{ now() >= (w_start | as_datetime) }}"
+      timeout: "12:00:00"
+      continue_on_timeout: false
+    - service: switch.turn_on
+      target:
+        entity_id: switch.ev_charger
+    - wait_for_trigger:
+        - platform: template
+          value_template: "{{ now() >= (w_end | as_datetime) }}"
+      timeout: "12:00:00"
+      continue_on_timeout: false
+    - service: switch.turn_off
+      target:
+        entity_id: switch.ev_charger
+  mode: single
+
+# 3) Heat pump / water heater boost: stop when the current hour turns expensive
+#    relative to today's average (compare in SEK/kWh incl. VAT + grid fee).
+- id: heatpump_stop_when_expensive
+  alias: "Heat pump: stop when price above today's average"
+  trigger:
+    - platform: time_pattern
+      minutes: "/5"
+  condition:
+    - condition: template
+      value_template: >
+        {{ states('sensor.spot_price_<AREA>_current_price') | float(999)
+        > (states('sensor.spot_price_<AREA>_today_average') | float(0) + 0.05) }}
+  action:
+    - service: switch.turn_off
+      target:
+        entity_id: switch.heat_pump_boost
+  mode: single
+
+# 4) Negative prices notification (spot prices can go negative in windy hours).
+- id: negative_price_alert
+  alias: "Prices: Negative price right now"
+  trigger:
+    - platform: time_pattern
+      minutes: "/5"
+  condition:
+    - condition: template
+      value_template: "{{ states('sensor.spot_price_<AREA>_current_price') | float(0) < 0 }}"
+  action:
+    - service: notify.notify
+      data:
+        title: "Negative electricity price"
+        message: >
+          Price is {{ states('sensor.spot_price_<AREA>_current_price') }}
+          SEK/kWh - a great time to charge.
+  mode: single

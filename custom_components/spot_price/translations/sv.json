@@ -1,0 +1,46 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Spotpris",
+        "description": "Hämtar aktuella spotpriser från eupowerprices.com för ett elområde. Välj ett område från listan eller skriv ett eget. En API-nyckel från eupowerprices är frivillig men rekommenderad: med nyckel använder integrationen det officiella /v1-API:t i stället för den publika marknadsendpunkten.",
+        "data": {
+          "area": "Elområde",
+          "currency": "Valuta",
+          "name": "Namn (valfritt)",
+          "api_key": "API-nyckel (valfritt)",
+          "forecast_days": "Prognosperiod (dagar)"
+        }
+      }
+    },
+    "error": {
+      "invalid_area_code": "Det är inte en giltig områdeskod. Exempel: SE1, NO2, DK1.",
+      "unknown_area": "API:n känner inte till den områdeskoden. Välj från listan eller kontrollera vilka områden din nyckel ger åtkomst till."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Spotpris – alternativ",
+        "description": "Konverterar EUR/MWh till ditt faktiska pris (i din valuta) och ställer in logiken för billigaste fönstret. Elområdet kan ändras här också. Lämna API-nyckeln tom för att använda den publika marknadsendpunkten.",
+        "data": {
+          "area": "Elområde",
+          "currency": "Valuta",
+          "api_key": "API-nyckel (tom = publik API)",
+          "fx_mode": "Valutakursläge",
+          "fixed_fx": "Fast EUR→kurs (din valuta)",
+          "vat_pct": "Moms %",
+          "grid_fee_sek_kwh": "Nätavgift (per kWh, i din valuta)",
+          "window_hours": "Billigaste fönster (timmar)",
+          "low_price_threshold_sek": "Lågpriströskel (per kWh, i din valuta)",
+          "update_interval_minutes": "Uppdateringsintervall (minuter)",
+          "forecast_days": "Prognosperiod (dagar)"
+        }
+      }
+    },
+    "error": {
+      "invalid_area_code": "Det är inte en giltig områdeskod. Exempel: SE1, NO2, DK1.",
+      "unknown_area": "API:n känner inte till den områdeskoden. Välj från listan eller kontrollera vilka områden din nyckel ger åtkomst till."
+    }
+  }
+}

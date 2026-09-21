@@ -1,0 +1,14 @@
+{
+  "domain": "spot_price",
+  "name": "Spot Price",
+  "codeowners": [
+    "@daniel-jo"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/daniel-jo/spot-price/blob/main/README.md",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "1.0.0",
+  "issue_tracker": "https://github.com/daniel-jo/spot-price/issues"
+}
