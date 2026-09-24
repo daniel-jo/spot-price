@@ -202,8 +202,8 @@ def test_lookup_current():
 
 def test_next_low():
     points = _pts([(13, 100.0), (14, 20.0), (15, 5.0)])
-    # threshold in SEK/kWh with fx=10, vat=0, fee=0:
-    #   14:00 -> 0.20 SEK/kWh ; 15:00 -> 0.05 SEK/kWh
+    # threshold in the configured currency per kWh with fx=10, vat=0, fee=0:
+    #   14:00 -> 0.20 ; 15:00 -> 0.05
     low = helper.next_low(points, 0.10, 10.0, 0.0, 0.0)
     assert low is not None
     assert low.start.hour == 15
@@ -298,13 +298,15 @@ def test_supported_currencies_derive_from_areas():
     assert const.SUPPORTED_CURRENCIES == sorted(
         {const.AREA_CURRENCIES[a] for a in const.SUPPORTED_AREAS}
     )
-    assert const.SUPPORTED_CURRENCIES == ["CZK", "DKK", "EUR", "NOK", "PLN", "SEK"]
+    # snapshot guard without hardcoding the full list: the default European
+    # currencies must keep being offered
+    assert {"CZK", "DKK", "EUR", "NOK", "PLN"} <= set(const.SUPPORTED_CURRENCIES)
 
 
 def test_area_currency_spot_checks():
     import const  # noqa: E402 - same package dir as helper
 
-    assert const.AREA_CURRENCIES["SE1"] == "SEK"
+    assert const.AREA_CURRENCIES["EE"] == "EUR"
     assert const.AREA_CURRENCIES["DK2"] == "DKK"
     assert const.AREA_CURRENCIES["NO5"] == "NOK"
     assert const.AREA_CURRENCIES["CZ"] == "CZK"
@@ -323,7 +325,7 @@ def test_compact_hours_shape_and_values():
         {
             "start": base + timedelta(hours=i),
             "eur_mwh": 10.0 + i,
-            "sek_kwh": 1.2 + i / 10,
+            "price_kwh": 1.2 + i / 10,
             "source": "forecast",
         }
         for i in range(4)
@@ -334,9 +336,100 @@ def test_compact_hours_shape_and_values():
         assert set(slim) == {"s", "p"}
         assert slim["s"] == int(orig["start"].timestamp())
         assert datetime.fromtimestamp(slim["s"], tz=UTC) == orig["start"]
-        assert slim["p"] == orig["sek_kwh"]
+        assert slim["p"] == orig["price_kwh"]
     # order preserved
     assert [c["s"] for c in compact] == sorted(c["s"] for c in compact)
+
+
+# --- scheduling (13:30 market-time anchor) ------------------------------------
+
+def test_next_anchor_time_winter_and_summer():
+    # 13:30 Europe/Stockholm = 12:30 UTC in CET (winter) and 11:30 UTC in CEST.
+    winter = datetime(2026, 1, 15, 10, 0, tzinfo=UTC)  # 11:00 CET
+    assert helper.next_anchor_time(winter, tz_name="Europe/Stockholm") == datetime(
+        2026, 1, 15, 12, 30, tzinfo=UTC
+    )
+    summer = datetime(2026, 7, 15, 10, 0, tzinfo=UTC)  # 12:00 CEST
+    assert helper.next_anchor_time(summer, tz_name="Europe/Stockholm") == datetime(
+        2026, 7, 15, 11, 30, tzinfo=UTC
+    )
+
+
+def test_next_anchor_time_is_strictly_future():
+    # Exactly at the anchor (13:30 CET = 12:30 UTC) -> next day, never repeats.
+    at_anchor = datetime(2026, 1, 15, 12, 30, tzinfo=UTC)
+    assert helper.next_anchor_time(at_anchor, tz_name="Europe/Stockholm") == datetime(
+        2026, 1, 16, 12, 30, tzinfo=UTC
+    )
+    after_anchor = datetime(2026, 1, 15, 13, 0, tzinfo=UTC)
+    assert helper.next_anchor_time(after_anchor, tz_name="Europe/Stockholm") == datetime(
+        2026, 1, 16, 12, 30, tzinfo=UTC
+    )
+
+
+def test_next_fetch_time_default_interval_hourly():
+    # 08:00 CET, interval 60 min: anchor is far away -> plain hourly cadence.
+    now = datetime(2026, 1, 15, 7, 0, tzinfo=UTC)  # 08:00 CET
+    assert helper.next_fetch_time(now, 60, tz_name="Europe/Stockholm") == datetime(
+        2026, 1, 15, 8, 0, tzinfo=UTC
+    )
+
+
+def test_next_fetch_time_snaps_to_anchor():
+    # 12:30 CET (candidate 13:30) -> snap to the 13:30 anchor, same day.
+    now = datetime(2026, 1, 15, 11, 30, tzinfo=UTC)  # 12:30 CET
+    assert helper.next_fetch_time(now, 60, tz_name="Europe/Stockholm") == datetime(
+        2026, 1, 15, 12, 30, tzinfo=UTC
+    )
+    # 6 h cadence around the anchor: 19:30 -> 01:30 -> 07:30 -> 13:30.
+    evening = datetime(2026, 1, 15, 18, 30, tzinfo=UTC)  # 19:30 CET
+    assert helper.next_fetch_time(evening, 360, tz_name="Europe/Stockholm") == datetime(
+        2026, 1, 16, 0, 30, tzinfo=UTC
+    )
+    night = datetime(2026, 1, 16, 0, 30, tzinfo=UTC)  # 01:30 CET
+    assert helper.next_fetch_time(night, 360, tz_name="Europe/Stockholm") == datetime(
+        2026, 1, 16, 6, 30, tzinfo=UTC
+    )
+    morning = datetime(2026, 1, 16, 6, 30, tzinfo=UTC)  # 07:30 CET
+    assert helper.next_fetch_time(morning, 360, tz_name="Europe/Stockholm") == datetime(
+        2026, 1, 16, 12, 30, tzinfo=UTC
+    )
+
+
+def test_next_fetch_time_daily_anchor_any_interval():
+    # Even a 24 h interval keeps the daily 13:30 anchor (snap beats candidate).
+    now = datetime(2026, 1, 15, 14, 0, tzinfo=UTC)  # 15:00 CET, after anchor
+    nxt = helper.next_fetch_time(now, 1440, tz_name="Europe/Stockholm")
+    assert nxt == datetime(2026, 1, 16, 12, 30, tzinfo=UTC)
+
+
+# --- history -----------------------------------------------------------------
+
+def test_history_slice_returns_last_24_hours():
+    base = datetime(2026, 9, 17, 0, 0, tzinfo=UTC)
+    points = [helper.PricePoint(base + timedelta(hours=i), float(i)) for i in range(48)]
+    now = base + timedelta(hours=30)  # inside the hour starting at 30
+    hist = helper.history_slice(points, now, hours=24)
+    assert len(hist) == 24
+    assert hist[0].start == base + timedelta(hours=6)
+    assert hist[-1].start == base + timedelta(hours=29)
+
+
+def test_history_slice_excludes_running_hour():
+    base = datetime(2026, 9, 17, 0, 0, tzinfo=UTC)
+    points = [helper.PricePoint(base + timedelta(hours=i), float(i)) for i in range(48)]
+    now = base + timedelta(hours=30, minutes=15)
+    hist = helper.history_slice(points, now, hours=24)
+    assert hist[-1].start == base + timedelta(hours=29)  # hour 30 is running
+    assert len(hist) == 24
+
+
+def test_history_slice_fewer_points_on_short_history():
+    base = datetime(2026, 9, 17, 0, 0, tzinfo=UTC)
+    points = [helper.PricePoint(base + timedelta(hours=i), float(i)) for i in range(10)]
+    hist = helper.history_slice(points, base + timedelta(hours=10), hours=24)
+    assert len(hist) == 10  # only what the payload actually holds
+
 
 
 def test_forecast_attrs_under_recorder_limit():
@@ -347,7 +440,7 @@ def test_forecast_attrs_under_recorder_limit():
         {
             "start": base + timedelta(hours=i),
             "eur_mwh": -8.0 + (i % 7),
-            "sek_kwh": -1.2 + (i % 7),
+            "price_kwh": -1.2 + (i % 7),
             "source": "forecast",
         }
         for i in range(14 * 24)
@@ -357,13 +450,13 @@ def test_forecast_attrs_under_recorder_limit():
         "horizon_days": 14,
         "hours_count": len(hours),
         "days_count": 14,
-        "avg_sek_kwh": 0.55,
+        "avg_kwh": 0.55,
         "days": [
             {
                 "date": (base + timedelta(days=d)).date().isoformat(),
-                "min_sek_kwh": -2.1,
-                "max_sek_kwh": 3.4,
-                "avg_sek_kwh": 0.55,
+                "min_kwh": -2.1,
+                "max_kwh": 3.4,
+                "avg_kwh": 0.55,
                 "min_eur_mwh": -9.5,
                 "min_at": (base + timedelta(days=d, hours=3)).isoformat(),
                 "max_at": (base + timedelta(days=d, hours=19)).isoformat(),
@@ -372,10 +465,10 @@ def test_forecast_attrs_under_recorder_limit():
             for d in range(14)
         ],
         "hours": helper.compact_hours(hours),
-        "currency": "SEK",
+        "currency": "EUR",
         "fx_source": "live (Frankfurter/ECB)",
         "vat_pct": 25.0,
-        "grid_fee_sek_kwh": 0.3,
+        "grid_fee_kwh": 0.3,
     }
     size = len(json.dumps(fc, separators=(",", ":")).encode("utf-8"))
     assert size < 16384

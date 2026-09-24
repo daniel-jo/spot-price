@@ -30,9 +30,9 @@
           "fx_mode": "Valutakursläge",
           "fixed_fx": "Fast EUR→kurs (din valuta)",
           "vat_pct": "Moms %",
-          "grid_fee_sek_kwh": "Nätavgift (per kWh, i din valuta)",
+          "grid_fee_kwh": "Nätavgift (per kWh, i din valuta)",
           "window_hours": "Billigaste fönster (timmar)",
-          "low_price_threshold_sek": "Lågpriströskel (per kWh, i din valuta)",
+          "low_price_threshold_kwh": "Lågpriströskel (per kWh, i din valuta)",
           "update_interval_minutes": "Uppdateringsintervall (minuter)",
           "forecast_days": "Prognosperiod (dagar)"
         }

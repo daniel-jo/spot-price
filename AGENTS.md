@@ -53,11 +53,30 @@ README.md
   committing and pushing are up to the user. Do it only when the user
   explicitly asks — the "Releasing" steps below are no exception.
 
+## Version bumps
+
+- Every changeset gets a version bump before the work is left uncommitted —
+  code, test and doc-only changes alike. Bump `version` in **both**
+  `custom_components/spot_price/manifest.json` and
+  `custom_components/spot_price/const.py` (`VERSION` constant); the two must
+  always match.
+- Size the bump to the change (semver, from whatever version the working tree
+  currently carries):
+  - **major** — breaking changes: altered contracts (sensor entity IDs, the
+    pricing formula, the bundled card element name) or behaviour users depend on.
+  - **minor** — new backwards-compatible functionality: new sensors/options,
+    scheduling or behaviour improvements, new API support.
+  - **patch** — bug fixes, internal refactors, test and doc-only changes.
+- Bump only once per uncommitted changeset. Check
+  `git diff HEAD -- custom_components/spot_price/manifest.json
+  custom_components/spot_price/const.py`: if the version(s) already differ
+  from the last commit, a bump is pending for this batch — leave it alone. The
+  next bump happens on the first change made after the pending one is committed.
+
 ## Releasing
 
-1. Bump `version` in **both** `custom_components/spot_price/manifest.json` and
-   `custom_components/spot_price/const.py` (`VERSION` constant) — the two must
-   always match.
+1. Verify the current batch has its version bump (see "Version bumps"); bump it
+   only if the working tree does not already carry one.
 2. Commit, tag `v<version>` and push: `git push origin main --tags`.
 3. Create a GitHub Release for the tag (gh CLI or the web UI).
 
@@ -82,8 +101,9 @@ README.md
 
 - Browser-like headers (Chrome user-agent + `Accept`, `Sec-Fetch-*`, …) are
   required because the API sits behind Cloudflare.
-- Fetch sparingly: at most every 30 minutes (default 6 h), and cache the last
-  good payload to `/config/spot_price/cache.json`.
+- Fetch sparingly: at most every 30 minutes (default 1 h, anchored to 13:30
+  Europe/Stockholm market time), and cache the last good payload to
+  `/config/spot_price/cache.json`.
 
 ## Style
 

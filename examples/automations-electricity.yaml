@@ -4,26 +4,13 @@
 # Entity IDs use a <AREA> placeholder — replace it with your configured area
 # (e.g. SE1–SE4, NO2, DK1) and swap in your own switch/fan/notify targets
 # below.
+#
+# NOTE: the integration refreshes itself on a 13:30 market-time anchored
+# schedule (default hourly, configurable 30 min–24 h), so no manual "refresh
+# after day-ahead publication" automation is needed anymore.
 # ---------------------------------------------------------------------------
 
-# 1) Keep prices fresh: refresh right after the day-ahead publication and a
-#    couple of times during the evening. `homeassistant.update_entity` on any
-#    spot_price sensor refreshes the whole integration.
-- id: spot_price_refresh_daily
-  alias: "Prices: Refresh after day-ahead publication"
-  trigger:
-    - platform: time
-      at:
-        - "13:20:00"
-        - "15:30:00"
-        - "20:00:00"
-  action:
-    - service: homeassistant.update_entity
-      target:
-        entity_id: sensor.spot_price_<AREA>_last_update
-  mode: single
-
-# 2) EV charger: charge during today's cheapest window. When a new cheapest
+# 1) EV charger: charge during today's cheapest window. When a new cheapest
 #    window becomes available the automation waits for its start time,
 #    switches the charger on, then off again at window end.
 - id: ev_charge_cheapest_window_today
@@ -59,8 +46,9 @@
         entity_id: switch.ev_charger
   mode: single
 
-# 3) Heat pump / water heater boost: stop when the current hour turns expensive
-#    relative to today's average (compare in SEK/kWh incl. VAT + grid fee).
+# 2) Heat pump / water heater boost: stop when the current hour turns expensive
+#    relative to today's average (compare in the sensor's unit — your
+#    currency/kWh — incl. VAT + grid fee).
 - id: heatpump_stop_when_expensive
   alias: "Heat pump: stop when price above today's average"
   trigger:
@@ -77,7 +65,7 @@
         entity_id: switch.heat_pump_boost
   mode: single
 
-# 4) Negative prices notification (spot prices can go negative in windy hours).
+# 3) Negative prices notification (spot prices can go negative in windy hours).
 - id: negative_price_alert
   alias: "Prices: Negative price right now"
   trigger:
@@ -92,5 +80,6 @@
         title: "Negative electricity price"
         message: >
           Price is {{ states('sensor.spot_price_<AREA>_current_price') }}
-          SEK/kWh - a great time to charge.
+          {{ state_attr('sensor.spot_price_<AREA>_current_price', 'unit_of_measurement') }}
+          - a great time to charge.
   mode: single

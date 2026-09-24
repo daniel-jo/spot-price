@@ -11,6 +11,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
 UTC = timezone.utc
 
@@ -100,6 +101,21 @@ def filter_starting_at(points: list[PricePoint], start_dt: datetime) -> list[Pri
     """Return points at or after `start_dt` (including the running hour)."""
     cutoff = floor_hour(start_dt)
     return [p for p in points if p.start >= cutoff]
+
+
+def history_slice(points: list[PricePoint], now: datetime, hours: int = 24) -> list[PricePoint]:
+    """Return the hourly points covering the last ``hours`` before the running hour.
+
+    The window is half-open ``[floor_hour(now-hours), floor_hour(now))`` — the
+    running hour is excluded — and only points the payload actually contains
+    are returned, so a fresh install with less history yields fewer than
+    ``hours`` points instead of padding. Backs the always-on 24 h history
+    block; the fetch window already reaches far enough back (FETCH_BACK_HOURS)
+    that a full history is available whenever the API provides it.
+    """
+    cutoff = floor_hour(now)
+    start = cutoff - timedelta(hours=max(0, hours))
+    return [p for p in points if start <= p.start < cutoff]
 
 
 def to_price_per_kwh(
@@ -252,6 +268,58 @@ def clamp_window(
     return [p for p in points if start <= p.start < end]
 
 
+def next_anchor_time(
+    now: datetime,
+    *,
+    anchor_hour: int = 13,
+    anchor_minute: int = 30,
+    tz_name: str = "Europe/Stockholm",
+) -> datetime:
+    """Next UTC instant of the daily anchor in ``tz_name``, strictly after ``now``.
+
+    The day-ahead market (ENTSO-E) publishes around 13:00 CET/CEST, so the
+    anchor is 13:30 by default. Resolution is timezone-neutral: the anchor is
+    computed against the *market* zone (``Europe/Stockholm`` == CET/CEST,
+    DST-aware via zoneinfo), never against the Home Assistant instance's own
+    timezone — 13:30 Stockholm is 12:30 UTC (CET) / 11:30 UTC (CEST).
+    """
+    tz = ZoneInfo(tz_name)
+    local = now.astimezone(tz)
+    anchor = local.replace(
+        hour=anchor_hour, minute=anchor_minute, second=0, microsecond=0
+    )
+    if anchor <= local:  # exactly at the anchor -> wait for tomorrow
+        anchor += timedelta(days=1)
+    return anchor.astimezone(UTC)
+
+
+def next_fetch_time(
+    now: datetime,
+    interval_minutes: int,
+    *,
+    anchor_hour: int = 13,
+    anchor_minute: int = 30,
+    tz_name: str = "Europe/Stockholm",
+) -> datetime:
+    """Next poll instant: ``min(now + interval, next market anchor)``.
+
+    Chaining this after every refresh keeps the configured cadence (default
+    hourly) while always snapping back to the daily market anchor whenever one
+    falls inside the interval horizon, so the fresh day-ahead publication is
+    picked up at any interval — e.g. 60 min yields
+    ``13:30, 14:30, 15:30, …`` and the 6 h cadence ``13:30, 19:30, 01:30,
+    07:30`` — all DST-correct.
+    """
+    candidate = now + timedelta(minutes=max(1, int(interval_minutes)))
+    anchor = next_anchor_time(
+        now,
+        anchor_hour=anchor_hour,
+        anchor_minute=anchor_minute,
+        tz_name=tz_name,
+    )
+    return anchor if anchor <= candidate else candidate
+
+
 def compact_hours(hours: list[dict]) -> list[dict[str, Any]]:
     """Shrink the forecast's hourly list to ``[{s, p}, ...]``.
 
@@ -259,14 +327,14 @@ def compact_hours(hours: list[dict]) -> list[dict[str, Any]]:
     price in the configured currency — the same instant/value the extended
     shape carried, in a fraction of the bytes. Home Assistant's recorder
     refuses to persist state attributes above 16,384 bytes (serialized JSON);
-    the extended per-hour shape (`start`, `eur_mwh`, `sek_kwh`, `source`)
+    the extended per-hour shape (`start`, `eur_mwh`, `price_kwh`, `source`)
     measures ~33 kB for a 14-day forecast while this one stays at ~10 kB even
     with the per-day `days` summary appended. Malformed rows are skipped.
     """
     out: list[dict[str, Any]] = []
     for hour in hours:
         try:
-            out.append({"s": int(hour["start"].timestamp()), "p": hour["sek_kwh"]})
+            out.append({"s": int(hour["start"].timestamp()), "p": hour["price_kwh"]})
         except (AttributeError, KeyError, TypeError, ValueError):
             continue
     return out

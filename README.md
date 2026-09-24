@@ -83,6 +83,7 @@ configured zone (`<AREA>` → `sensor.spot_price_<AREA>_…`).
 | `cheapest_window_tomorrow` | currency/kWh avg | best N consecutive hours of tomorrow |
 | `next_low_price` | currency/kWh | first hour ≤ configured threshold (else unavailable) |
 | `forecast` | currency/kWh avg | full configured period (default 14 days); compact `hours` (`[{s, p}]`: unix epoch, end-user price) + per-day `days` — under HA's 16 kB attribute limit |
+| `history` | currency/kWh avg | always-on last 24 h of realized prices; full hourly `hours` + min/max/avg in attributes |
 | `fx_rate` | `EUR/<currency>` | FX used (EUR→your currency) |
 | `last_update` / `last_error` | — | diagnostics |
 
@@ -173,9 +174,15 @@ the whole horizon fits Home Assistant's 16 kB state-attribute limit; lower
   and sorted A–Z; curated fallback: `DK1` `DK2` `FI` `NO1–NO5` `SE1–SE4`,
   `EE` `LT` `LV`, `AT` `BE` `CZ` `DE` `FR` `NL` `PL` `SK`, `ES` `PT`. Custom
   codes are checked live against the API.
-- The integration fetches at most every 30 min (default 6 h), presents
-  browser-like headers (the API sits behind Cloudflare) and caches the last
-  good payload to `/config/spot_price/cache.json`.
+- **Refresh schedule** — the first fetch after a restart waits for the next
+  **13:30 Europe/Stockholm** (CET/CEST) market-time anchor — the day-ahead
+  prices are published around 13:00 — then refreshes every hour (configurable
+  30 min–24 h) while always snapping back to the 13:30 anchor. Timezone-neutral
+  and DST-correct: the anchor is resolved against the market zone, never your
+  HA instance's timezone. A fresh install with no data fetches immediately; a
+  cache is served until the first anchored poll. Browser-like headers are
+  presented (the API sits behind Cloudflare) and the last good payload is
+  cached to `/config/spot_price/cache.json`.
 - Prices shown are **market spot + VAT + grid fee**, not your full tariff —
   the supplier's fixed per-kWh price and monthly fee are added on the invoice.
 

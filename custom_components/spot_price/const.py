@@ -23,9 +23,9 @@ CONF_CURRENCY = "currency"
 CONF_FX_MODE = "fx_mode"
 CONF_FIXED_FX = "fixed_fx"
 CONF_VAT_PCT = "vat_pct"
-CONF_GRID_FEE = "grid_fee_sek_kwh"
+CONF_GRID_FEE = "grid_fee_kwh"
 CONF_WINDOW_HOURS = "window_hours"
-CONF_LOW_THRESHOLD = "low_price_threshold_sek"
+CONF_LOW_THRESHOLD = "low_price_threshold_kwh"
 CONF_UPDATE_INTERVAL = "update_interval_minutes"
 CONF_FORECAST_DAYS = "forecast_days"
 
@@ -41,8 +41,21 @@ DEFAULT_VAT_PCT = 25.0
 DEFAULT_GRID_FEE = 0.0
 DEFAULT_WINDOW_HOURS = 3
 DEFAULT_LOW_THRESHOLD = None
-DEFAULT_UPDATE_INTERVAL = 360  # minutes between background refreshes
+DEFAULT_UPDATE_INTERVAL = 60  # minutes between background refreshes (13:30-anchored)
 DEFAULT_FORECAST_DAYS = 14  # days of future prices to fetch and expose
+
+# --- polling schedule -------------------------------------------------------
+# The day-ahead market (ENTSO-E) publishes fresh prices around 13:00 CET/CEST,
+# so the first fetch after a restart waits for the next 13:30 *market* anchor
+# instead of firing at an arbitrary wall-clock time. Anchoring is
+# timezone-neutral: the anchor is resolved against Europe/Stockholm (CET/CEST,
+# DST-aware via zoneinfo) — never against the HA instance's own timezone.
+# After the anchor the configured interval (DEFAULT_UPDATE_INTERVAL) is
+# chained, snapping back to the anchor whenever one falls inside the interval
+# horizon, so the daily publication is always picked up.
+MARKET_TIMEZONE = "Europe/Stockholm"
+SCHEDULE_ANCHOR_HOUR = 13
+SCHEDULE_ANCHOR_MINUTE = 30
 
 # --- areas ------------------------------------------------------------------
 # Area codes exposed by the site (Nordics / Baltics / Core / Iberia). The
@@ -83,11 +96,11 @@ SUPPORTED_CURRENCIES = sorted({AREA_CURRENCIES[a] for a in SUPPORTED_AREAS})
 MIN_FORECAST_DAYS = 1
 MAX_FORECAST_DAYS = 14
 FORECAST_RANGE_DAYS = MAX_FORECAST_DAYS  # default/fallback fetch horizon
-FETCH_BACK_HOURS = 36  # ensures the whole current local day is covered by `actual`
+FETCH_BACK_HOURS = 48  # guarantees >=24 h of actuals plus the whole current local day
 
 # Home Assistant's recorder refuses to persist state attributes beyond 16,384
 # bytes (serialized JSON) and logs "State attributes ... exceed maximum size".
-# The pretty per-hour shape (`start`, `eur_mwh`, `sek_kwh`, `source`) measures
+# The pretty per-hour shape (`start`, `eur_mwh`, `price_kwh`, `source`) measures
 # ~33 kB for a full 14-day forecast, so the `forecast` sensor exposes a compact
 # `hours` shape instead — `[{s: unix_epoch, p: end-user price}, ...]` — which
 # stays at ~10 kB with the per-day `days` summary appended

@@ -107,10 +107,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     coordinator = EupowerpricesCoordinator(hass, entry)
 
-    # First refresh. On API failure with an existing on-disk cache the
-    # coordinator returns cached data and setup succeeds; only a total
-    # failure raises and HA retries setup automatically (backoff).
+    # First refresh. With an existing on-disk cache the coordinator serves the
+    # cached view immediately (no network) and the first *network* fetch waits
+    # for the next 13:30 market-time anchor; without any data it fetches right
+    # away. Only a total failure (no data anywhere) raises and HA retries setup
+    # automatically (backoff).
     await coordinator.async_config_entry_first_refresh()
+    coordinator.start_schedule()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -119,6 +122,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    if coordinator is not None:
+        coordinator.cancel_schedule()
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data.setdefault(DOMAIN, {}).pop(entry.entry_id, None)

@@ -23,7 +23,7 @@
  * (`[{ s: unix_epoch, p: end-user price }, …]`, kept tiny so the whole
  * configured horizon fits Home Assistant's 16 kB state-attribute limit) plus,
  * when `show_past`, today's elapsed hours from
- * `sensor.spot_price_<AREA>_today_minimum` (`{ start, sek_kwh, … }`).
+ * `sensor.spot_price_<AREA>_today_minimum` (`{ start, price_kwh, … }`).
  */
 (function () {
   "use strict";
@@ -176,7 +176,7 @@
       // The forecast (running hour + future) second – wins on overlap.
       // Entries arrive in the compact `{ s, p }` shape (the whole 14-day
       // period must stay under HA's 16 kB attribute limit); normalise them
-      // back to the extended `{ start, sek_kwh }` form the renderer expects.
+      // back to the extended `{ start, price_kwh }` form the renderer expects.
       // Both sources dedupe on the same UTC instant (via `Date.getTime()` /
       // `s * 1000`) so overlapping hours never get plotted twice.
       const forecastState = ids.forecastId ? states[ids.forecastId] : null;
@@ -190,7 +190,7 @@
             if (typeof hour.s === "number") {
               ts = hour.s * 1000;
               if (Number.isNaN(ts)) continue;
-              entry = { start: new Date(ts).toISOString(), sek_kwh: hour.p };
+              entry = { start: new Date(ts).toISOString(), price_kwh: hour.p };
             } else if (hour.start) {
               ts = new Date(hour.start).getTime();
               if (Number.isNaN(ts)) continue;
@@ -221,8 +221,8 @@
           const start = new Date(hour.start);
           if (Number.isNaN(start.getTime())) return null;
           const price =
-            typeof hour.sek_kwh === "number" && Number.isFinite(hour.sek_kwh)
-              ? hour.sek_kwh
+            typeof hour.price_kwh === "number" && Number.isFinite(hour.price_kwh)
+              ? hour.price_kwh
               : null;
           if (price === null) return null;
           const eur =
@@ -251,7 +251,7 @@
       const currency = attrs.currency || "";
       const unit =
         attrs.unit_of_measurement || (currency ? `${currency}/kWh` : "");
-      const avgAttr = attrs.avg_sek_kwh;
+      const avgAttr = attrs.avg_kwh;
       const avg =
         typeof avgAttr === "number" && Number.isFinite(avgAttr)
           ? avgAttr

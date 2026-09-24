@@ -30,9 +30,9 @@
           "fx_mode": "FX rate mode",
           "fixed_fx": "Fixed EUR→your-currency rate",
           "vat_pct": "VAT %",
-          "grid_fee_sek_kwh": "Grid fee (per kWh, in your currency)",
+          "grid_fee_kwh": "Grid fee (per kWh, in your currency)",
           "window_hours": "Cheapest window (hours)",
-          "low_price_threshold_sek": "Low price threshold (per kWh, in your currency)",
+          "low_price_threshold_kwh": "Low price threshold (per kWh, in your currency)",
           "update_interval_minutes": "Update interval (minutes)",
           "forecast_days": "Forecast period (days)"
         }

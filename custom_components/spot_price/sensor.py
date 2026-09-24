@@ -44,7 +44,7 @@ def _nice_hours(hours: list[dict]) -> list[dict]:
         entry = {
             "start": _iso(hour["start"]),
             "eur_mwh": hour["eur_mwh"],
-            "sek_kwh": hour["sek_kwh"],
+            "price_kwh": hour["price_kwh"],
         }
         if "source" in hour:
             entry["source"] = hour["source"]
@@ -76,15 +76,19 @@ def _low(data: dict) -> dict:
     return (data.get("next_low") or {})
 
 
+def _history(data: dict) -> dict:
+    return (data.get("history") or {})
+
+
 def _day_attrs(day: dict) -> dict:
     if not day.get("available"):
         return {"available": False}
     return {
         "available": True,
         "date": day.get("date"),
-        "min_sek_kwh": day.get("min_sek"),
-        "max_sek_kwh": day.get("max_sek"),
-        "avg_sek_kwh": day.get("avg_sek"),
+        "min_kwh": day.get("min_kwh"),
+        "max_kwh": day.get("max_kwh"),
+        "avg_kwh": day.get("avg_kwh"),
         "min_eur_mwh": day.get("min_eur"),
         "min_at": _iso(day["min_at"]),
         "max_at": _iso(day["max_at"]),
@@ -111,7 +115,7 @@ def _fx_attrs(data: dict) -> dict:
         "fx_source": data.get("fx_source"),
         "currency": data.get("currency"),
         "vat_pct": data.get("vat_pct"),
-        "grid_fee_sek_kwh": data.get("grid_fee_sek_kwh"),
+        "grid_fee_kwh": data.get("grid_fee_kwh"),
     }
 
 
@@ -198,7 +202,7 @@ async def async_setup_entry(
         return {
             "start": _iso(low["start"]) if "start" in low else None,
             "eur_mwh": low.get("eur_mwh"),
-            "threshold_sek": data.get("threshold_sek"),
+            "threshold_kwh": data.get("threshold_kwh"),
         }
 
     def forecast_attrs(data: dict) -> dict:
@@ -216,13 +220,13 @@ async def async_setup_entry(
             "horizon_days": fc.get("horizon_days"),
             "hours_count": fc.get("hours_count"),
             "days_count": fc.get("days_count"),
-            "avg_sek_kwh": fc.get("avg_sek_kwh"),
+            "avg_kwh": fc.get("avg_kwh"),
             "days": [
                 {
                     "date": d.get("date"),
-                    "min_sek_kwh": d.get("min_sek"),
-                    "max_sek_kwh": d.get("max_sek"),
-                    "avg_sek_kwh": d.get("avg_sek"),
+                    "min_kwh": d.get("min_kwh"),
+                    "max_kwh": d.get("max_kwh"),
+                    "avg_kwh": d.get("avg_kwh"),
                     "min_eur_mwh": d.get("min_eur"),
                     "min_at": _iso(d["min_at"]) if d.get("min_at") else None,
                     "max_at": _iso(d["max_at"]) if d.get("max_at") else None,
@@ -231,6 +235,25 @@ async def async_setup_entry(
                 for d in fc.get("days", [])
             ],
             "hours": helper.compact_hours(fc.get("hours", [])),
+            **_fx_attrs(data),
+        }
+
+    def history_attrs(data: dict) -> dict:
+        """Attributes for the always-on 24 h history block."""
+        hist = _history(data)
+        if not hist:
+            return {"available": False}
+        return {
+            "available": True,
+            "window_hours": hist.get("hours_window"),
+            "hours_count": hist.get("hours_count"),
+            "min_kwh": hist.get("min_kwh"),
+            "max_kwh": hist.get("max_kwh"),
+            "avg_kwh": hist.get("avg_kwh"),
+            "min_eur_mwh": hist.get("min_eur"),
+            "min_at": _iso(hist["min_at"]) if hist.get("min_at") else None,
+            "max_at": _iso(hist["max_at"]) if hist.get("max_at") else None,
+            "hours": _nice_hours(hist.get("hours", [])),
             **_fx_attrs(data),
         }
 
@@ -245,9 +268,9 @@ async def async_setup_entry(
     sensors: list[EupowerpricesSensor] = [
         EupowerpricesSensor(
             coordinator,
-            "current_price_sek",
+            "current_price",
             "Current price",
-            lambda d: (_current(d) or {}).get("sek_kwh"),
+            lambda d: (_current(d) or {}).get("price_kwh"),
             current_attrs,
             unit=price_unit,
             state_class=SensorStateClass.MEASUREMENT,
@@ -255,7 +278,7 @@ async def async_setup_entry(
         ),
         EupowerpricesSensor(
             coordinator,
-            "current_price_eur",
+            "current_price_raw",
             "Current price (raw)",
             lambda d: (_current(d) or {}).get("eur_mwh"),
             current_attrs,
@@ -267,7 +290,7 @@ async def async_setup_entry(
             coordinator,
             "today_min",
             "Today minimum",
-            lambda d: (_today(d) or {}).get("min_sek"),
+            lambda d: (_today(d) or {}).get("min_kwh"),
             lambda d: _day_attrs(_today(d)),
             unit=price_unit,
             state_class=SensorStateClass.MEASUREMENT,
@@ -277,7 +300,7 @@ async def async_setup_entry(
             coordinator,
             "today_max",
             "Today maximum",
-            lambda d: (_today(d) or {}).get("max_sek"),
+            lambda d: (_today(d) or {}).get("max_kwh"),
             lambda d: _day_attrs(_today(d)),
             unit=price_unit,
             state_class=SensorStateClass.MEASUREMENT,
@@ -287,7 +310,7 @@ async def async_setup_entry(
             coordinator,
             "today_average",
             "Today average",
-            lambda d: (_today(d) or {}).get("avg_sek"),
+            lambda d: (_today(d) or {}).get("avg_kwh"),
             lambda d: _day_attrs(_today(d)),
             unit=price_unit,
             state_class=SensorStateClass.MEASUREMENT,
@@ -297,7 +320,7 @@ async def async_setup_entry(
             coordinator,
             "tomorrow_min",
             "Tomorrow minimum",
-            lambda d: (_tomorrow(d) or {}).get("min_sek"),
+            lambda d: (_tomorrow(d) or {}).get("min_kwh"),
             lambda d: _day_attrs(_tomorrow(d)),
             unit=price_unit,
             state_class=SensorStateClass.MEASUREMENT,
@@ -307,7 +330,7 @@ async def async_setup_entry(
             coordinator,
             "tomorrow_max",
             "Tomorrow maximum",
-            lambda d: (_tomorrow(d) or {}).get("max_sek"),
+            lambda d: (_tomorrow(d) or {}).get("max_kwh"),
             lambda d: _day_attrs(_tomorrow(d)),
             unit=price_unit,
             state_class=SensorStateClass.MEASUREMENT,
@@ -317,7 +340,7 @@ async def async_setup_entry(
             coordinator,
             "tomorrow_average",
             "Tomorrow average",
-            lambda d: (_tomorrow(d) or {}).get("avg_sek"),
+            lambda d: (_tomorrow(d) or {}).get("avg_kwh"),
             lambda d: _day_attrs(_tomorrow(d)),
             unit=price_unit,
             state_class=SensorStateClass.MEASUREMENT,
@@ -327,7 +350,7 @@ async def async_setup_entry(
             coordinator,
             "cheapest_window_today",
             "Cheapest window today",
-            lambda d: (_today_window(d) or {}).get("avg_sek_kwh"),
+            lambda d: (_today_window(d) or {}).get("avg_kwh"),
             lambda d: _window_attrs(_today_window(d), d),
             unit=price_unit,
             state_class=SensorStateClass.MEASUREMENT,
@@ -337,7 +360,7 @@ async def async_setup_entry(
             coordinator,
             "cheapest_window_tomorrow",
             "Cheapest window tomorrow",
-            lambda d: (_tomorrow_window(d) or {}).get("avg_sek_kwh"),
+            lambda d: (_tomorrow_window(d) or {}).get("avg_kwh"),
             lambda d: _window_attrs(_tomorrow_window(d), d),
             unit=price_unit,
             state_class=SensorStateClass.MEASUREMENT,
@@ -347,7 +370,7 @@ async def async_setup_entry(
             coordinator,
             "forecast",
             "Forecast",
-            lambda d: (d.get("forecast") or {}).get("avg_sek_kwh"),
+            lambda d: (d.get("forecast") or {}).get("avg_kwh"),
             forecast_attrs,
             unit=price_unit,
             state_class=SensorStateClass.MEASUREMENT,
@@ -355,9 +378,19 @@ async def async_setup_entry(
         ),
         EupowerpricesSensor(
             coordinator,
+            "history",
+            "History (24 h)",
+            lambda d: (_history(d) or {}).get("avg_kwh"),
+            history_attrs,
+            unit=price_unit,
+            state_class=SensorStateClass.MEASUREMENT,
+            icon="mdi:history",
+        ),
+        EupowerpricesSensor(
+            coordinator,
             "next_low_price",
             "Next low price",
-            lambda d: (_low(d) or {}).get("sek_kwh"),
+            lambda d: (_low(d) or {}).get("price_kwh"),
             low_attrs,
             unit=price_unit,
             state_class=SensorStateClass.MEASUREMENT,
