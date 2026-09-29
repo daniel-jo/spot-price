@@ -221,6 +221,7 @@ async def async_setup_entry(
             "hours_count": fc.get("hours_count"),
             "days_count": fc.get("days_count"),
             "avg_kwh": fc.get("avg_kwh"),
+            "data_until": _iso(fc["data_until"]) if fc.get("data_until") else None,
             "days": [
                 {
                     "date": d.get("date"),
@@ -262,6 +263,10 @@ async def async_setup_entry(
             "area": data.get("area"),
             "hours_total": data.get("hours_total"),
             "hours_remaining": data.get("hours_remaining"),
+            "api_mode": data.get("api_mode"),
+            "api_key_set": data.get("api_key_set"),
+            "fetched_at": _iso(data["fetched_at"]) if data.get("fetched_at") else None,
+            "cache_age_hours": data.get("cache_age_hours"),
             "last_error": coordinator.last_error,
         }
 

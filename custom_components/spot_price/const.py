@@ -98,6 +98,13 @@ MAX_FORECAST_DAYS = 14
 FORECAST_RANGE_DAYS = MAX_FORECAST_DAYS  # default/fallback fetch horizon
 FETCH_BACK_HOURS = 48  # guarantees >=24 h of actuals plus the whole current local day
 
+# A cached payload older than this is treated as stale at startup: the first
+# poll then goes straight to the network (with the cache still acting as a
+# fallback if that fetch fails) instead of blindly serving ancient data until
+# the next 13:30 market-time anchor. Prevents restarts/reloads from leaving
+# the sensor frozen on outdated prices for days.
+MAX_CACHE_AGE_HOURS = 36
+
 # Home Assistant's recorder refuses to persist state attributes beyond 16,384
 # bytes (serialized JSON) and logs "State attributes ... exceed maximum size".
 # The pretty per-hour shape (`start`, `eur_mwh`, `price_kwh`, `source`) measures

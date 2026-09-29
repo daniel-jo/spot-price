@@ -50,6 +50,7 @@ from .const import (
     FX_MODE_LIVE,
     FX_URL,
     MARKET_TIMEZONE,
+    MAX_CACHE_AGE_HOURS,
     MAX_FORECAST_DAYS,
     MIN_FORECAST_DAYS,
     REQUEST_HEADERS,
@@ -101,6 +102,8 @@ class EupowerpricesCoordinator(DataUpdateCoordinator):
         self._fx_source = ""
         self._unsub_timer: Optional[Callable] = None
         self._initialized = False
+        self._api_mode = "presentation"
+        self._api_key_set = False
         super().__init__(
             hass,
             _LOGGER,
@@ -131,6 +134,30 @@ class EupowerpricesCoordinator(DataUpdateCoordinator):
                     return await response.json(content_type=None)
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
             raise UpdateFailed(f"{url} -> {err}") from err
+
+    @staticmethod
+    def _fetch_error_hint(err: UpdateFailed, api_mode: str, area: str) -> str:
+        """Append a human hint for the eupowerprices HTTP errors we hit a lot.
+
+        The API sits behind Cloudflare and (since late 2026) requires a key on
+        every endpoint, so 401/403 have very specific causes worth surfacing in
+        the logs next to the raw ``UpdateFailed`` text.
+        """
+        msg = str(err)
+        if "403" in msg:
+            if api_mode == "v1":
+                return (
+                    " — the API rejected the request: check the key under "
+                    "Options and that it has access to this bidding zone "
+                    f"({area}; keys are per-area)"
+                )
+            return (
+                " — the API no longer serves this endpoint without a key; "
+                "add an API key under Options"
+            )
+        if "401" in msg:
+            return " — the API requires a valid API key; add one under Options"
+        return ""
 
     async def _async_fetch_fx(self) -> tuple[float, str]:
         """Return (EUR->currency rate, source label), with a fixed-rate fallback."""
@@ -181,10 +208,6 @@ class EupowerpricesCoordinator(DataUpdateCoordinator):
             "fetched_at_utc": cached.get("fetched_at_utc"),
             "fx_rate": cached.get("fx_rate"),
         }
-
-    def _load_cached_payload(self, api_mode: str) -> Optional[dict]:
-        state = self._load_cached_state(api_mode)
-        return state["payload"] if state is not None else None
 
     def _save_cached_payload(self, payload: dict, fx_rate: float, api_mode: str) -> None:
         def _write() -> None:
@@ -251,10 +274,17 @@ class EupowerpricesCoordinator(DataUpdateCoordinator):
         )
         _LOGGER.debug("Next Spot Price refresh scheduled for %s", when.isoformat())
 
-    def _async_timer_fired(self, now: datetime) -> None:
-        """Timer fired: reschedule first so a failed fetch never halts the cadence."""
+    async def _async_timer_fired(self, now: datetime) -> None:
+        """Timer fired: reschedule first so a failed fetch never halts the cadence.
+
+        Must be a coroutine (Home Assistant runs point-in-time callbacks on the
+        event loop): awaiting the coordinator refresh here — instead of wrapping
+        it in ``hass.async_create_task`` — keeps the call on the loop thread and
+        avoids the "async_create_task from a thread other than the event loop"
+        frame warning (a hard error in newer HA releases).
+        """
         self._async_schedule_next(now)
-        self.hass.async_create_task(self.async_request_refresh())
+        await self.async_request_refresh()
 
     # -- update ---------------------------------------------------------------
 
@@ -311,14 +341,28 @@ class EupowerpricesCoordinator(DataUpdateCoordinator):
                 "headers": dict(REQUEST_HEADERS),
             }
 
-        # First poll after startup: when a useable cache already exists, serve
+        self._api_mode = api_mode
+        self._api_key_set = bool(api_key)
+
+        # First poll after startup: when a recent useable cache exists, serve
         # it immediately instead of hitting the network — the first *network*
-        # fetch is deliberately anchored to the next 13:30 market time.
+        # fetch is deliberately anchored to the next 13:30 market time. A cache
+        # older than MAX_CACHE_AGE_HOURS is treated as stale and forces a
+        # network refresh (the cache still doubles as a fallback below), so
+        # restarts/reloads can never freeze the sensor on ancient data, even
+        # when HA has been off across a 13:30 anchor.
         if not self._initialized:
             cached = await self.hass.async_add_executor_job(
                 self._load_cached_state, api_mode
             )
-            if cached is not None:
+            cached_age = helper.cache_age_hours(
+                cached.get("fetched_at_utc") if cached is not None else None, now
+            )
+            if (
+                cached is not None
+                and cached_age is not None
+                and cached_age < MAX_CACHE_AGE_HOURS
+            ):
                 self._initialized = True
                 try:
                     points = self._parse_points(
@@ -341,31 +385,59 @@ class EupowerpricesCoordinator(DataUpdateCoordinator):
                         fetched_at = now
                     view = self._build_view(points, now, tz, fx_rate, opts)
                     view["fetched_at"] = fetched_at
+                    view["cache_age_hours"] = cached_age
                     return view
 
+        cached_fetched_at: Optional[datetime] = None
         payload = None
         try:
             payload = await self._async_fetch_json(url, **kwargs)
             self._last_error = ""
         except UpdateFailed as err:
-            _LOGGER.warning("Spot Price fetch failed: %s", err)
-            self._last_error = str(err)
-            payload = await self.hass.async_add_executor_job(
-                self._load_cached_payload, api_mode
+            _LOGGER.warning(
+                "Spot Price fetch failed: %s%s",
+                err,
+                self._fetch_error_hint(err, api_mode, area),
             )
-            if payload is None:
+            self._last_error = str(err)
+            # Serve the last good payload, keeping its real fetch time; the
+            # cache is deliberately NOT re-saved here — writing it back would
+            # re-stamp fetched_at_utc with "now" and mask the staleness.
+            cached = await self.hass.async_add_executor_job(
+                self._load_cached_state, api_mode
+            )
+            if cached is None:
                 raise  # nothing to work from -> HA retries setup on its own
+            payload = cached["payload"]
+            try:
+                cached_fetched_at = (
+                    dt_util.parse_datetime(cached.get("fetched_at_utc")) or now
+                )
+            except (TypeError, ValueError):
+                cached_fetched_at = now
 
         fx_rate, self._fx_source = await self._async_fetch_fx()
 
         try:
             points = self._parse_points(payload, api_mode, now, forecast_days)
+            if not points:
+                raise UpdateFailed(
+                    f"API returned no hourly points for {area} ({api_mode})"
+                )
         except (TypeError, ValueError, KeyError) as err:
             raise UpdateFailed(f"Could not parse API response: {err}") from err
 
         view = self._build_view(points, now, tz, fx_rate, opts)
         self._initialized = True
-        self._save_cached_payload(payload, fx_rate, api_mode)
+        if cached_fetched_at is not None:
+            # Data came from the cache -> keep the payload's real age visible
+            # instead of stamping "now" over it (the <= 1.0.x masking bug).
+            view["fetched_at"] = cached_fetched_at
+            view["cache_age_hours"] = helper.cache_age_hours(
+                cached_fetched_at.isoformat(), now
+            )
+        else:
+            self._save_cached_payload(payload, fx_rate, api_mode)
         return view
 
     # -- view construction -----------------------------------------------------
@@ -405,6 +477,8 @@ class EupowerpricesCoordinator(DataUpdateCoordinator):
             "fetched_at": now,
             "fx_rate": fx_rate,
             "fx_source": "",
+            "api_mode": self._api_mode,
+            "api_key_set": self._api_key_set,
             "vat_pct": vat_pct,
             "grid_fee_kwh": grid_fee,
             "window_hours": window_hours,
@@ -513,6 +587,7 @@ class EupowerpricesCoordinator(DataUpdateCoordinator):
                 "hours_count": len(forecast_points),
                 "days_count": len(days_out),
                 "avg_kwh": price(avg_eur),
+                "data_until": helper.series_until(forecast_points),
                 "days": days_out,
                 "hours": [
                     {

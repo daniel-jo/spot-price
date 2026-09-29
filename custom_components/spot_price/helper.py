@@ -320,6 +320,39 @@ def next_fetch_time(
     return anchor if anchor <= candidate else candidate
 
 
+def cache_age_hours(
+    fetched_at_utc: Optional[str], now: datetime
+) -> Optional[float]:
+    """Age of a cache entry in (fractional) hours, or None when unknown.
+
+    ``fetched_at_utc`` is the ISO-8601 timestamp the payload was originally
+    fetched at (as persisted in ``cache.json``). Missing or unparseable values
+    yield None so callers can treat the cache as stale conservatively. A
+    timestamp in the future (clock skew) is clipped to 0. Naive timestamps
+    are assumed to be UTC.
+    """
+    if not fetched_at_utc:
+        return None
+    try:
+        fetched = datetime.fromisoformat(str(fetched_at_utc).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if fetched.tzinfo is None:
+        fetched = fetched.replace(tzinfo=UTC)
+    return max(0.0, (now - fetched.astimezone(UTC)).total_seconds() / 3600.0)
+
+
+def series_until(points: list[PricePoint]) -> Optional[datetime]:
+    """Exclusive end of an hourly series: last hour's start + 1 hour, or None.
+
+    Used to expose ``data_until`` on the forecast sensor/attributes so the
+    point where the payload actually runs out is visible at a glance.
+    """
+    if not points:
+        return None
+    return points[-1].start + timedelta(hours=1)
+
+
 def compact_hours(hours: list[dict]) -> list[dict[str, Any]]:
     """Shrink the forecast's hourly list to ``[{s, p}, ...]``.
 

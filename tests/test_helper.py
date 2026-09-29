@@ -431,6 +431,34 @@ def test_history_slice_fewer_points_on_short_history():
     assert len(hist) == 10  # only what the payload actually holds
 
 
+# --- cache age / data horizon -------------------------------------------------
+
+def test_cache_age_hours_parses_iso_utc():
+    now = datetime(2026, 9, 28, 12, 0, tzinfo=UTC)
+    assert helper.cache_age_hours("2026-09-28T00:00:00+00:00", now) == 12.0
+    assert helper.cache_age_hours("2026-09-25T12:00:00Z", now) == 72.0
+    assert helper.cache_age_hours("2026-09-28T02:00:00", now) == 10.0  # naive = UTC
+
+
+def test_cache_age_hours_unknown_or_invalid_is_none():
+    now = datetime(2026, 9, 28, 12, 0, tzinfo=UTC)
+    assert helper.cache_age_hours(None, now) is None
+    assert helper.cache_age_hours("", now) is None
+    assert helper.cache_age_hours("not-a-date", now) is None
+
+
+def test_cache_age_hours_future_timestamp_is_zero():
+    now = datetime(2026, 9, 28, 12, 0, tzinfo=UTC)
+    assert helper.cache_age_hours("2026-09-28T13:00:00+00:00", now) == 0.0
+
+
+def test_series_until_bounds_last_hour():
+    base = datetime(2026, 9, 20, 0, 0, tzinfo=UTC)
+    pts = [helper.PricePoint(base + timedelta(hours=i), float(i)) for i in range(3)]
+    assert helper.series_until(pts) == base + timedelta(hours=3)
+    assert helper.series_until([]) is None
+
+
 
 def test_forecast_attrs_under_recorder_limit():
     # Home Assistant's recorder drops state attributes above 16,384 bytes.
@@ -451,6 +479,7 @@ def test_forecast_attrs_under_recorder_limit():
         "hours_count": len(hours),
         "days_count": 14,
         "avg_kwh": 0.55,
+        "data_until": (base + timedelta(hours=len(hours))).isoformat(),
         "days": [
             {
                 "date": (base + timedelta(days=d)).date().isoformat(),
