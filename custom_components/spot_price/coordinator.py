@@ -453,8 +453,6 @@ class EupowerpricesCoordinator(DataUpdateCoordinator):
         vat_pct = float(opts.get(CONF_VAT_PCT, DEFAULT_VAT_PCT))
         grid_fee = float(opts.get(CONF_GRID_FEE, DEFAULT_GRID_FEE))
         window_hours = int(opts.get(CONF_WINDOW_HOURS, DEFAULT_WINDOW_HOURS))
-        threshold = opts.get(CONF_LOW_THRESHOLD, DEFAULT_LOW_THRESHOLD)
-        threshold = None if threshold in (None, "") else float(threshold)
 
         def price(eur_per_mwh: float) -> float:
             return helper.to_price_per_kwh(eur_per_mwh, fx_rate, vat_pct, grid_fee)
@@ -471,6 +469,14 @@ class EupowerpricesCoordinator(DataUpdateCoordinator):
         )
         forecast_points = helper.first_n_days(future, now, forecast_days)
 
+        period_avg_kwh = None
+        period_avg_eur = None
+        if forecast_points:
+            period_avg_eur = sum(p.price_eur_mwh for p in forecast_points) / len(
+                forecast_points
+            )
+            period_avg_kwh = price(period_avg_eur)
+
         view: dict[str, Any] = {
             "area": opts[CONF_AREA],
             "currency": opts.get(CONF_CURRENCY, DEFAULT_CURRENCY),
@@ -482,7 +488,6 @@ class EupowerpricesCoordinator(DataUpdateCoordinator):
             "vat_pct": vat_pct,
             "grid_fee_kwh": grid_fee,
             "window_hours": window_hours,
-            "threshold_kwh": threshold,
             "hours_total": len(points),
             "hours_remaining": len(future),
             "current": None,
@@ -551,7 +556,7 @@ class EupowerpricesCoordinator(DataUpdateCoordinator):
                     ],
                 }
 
-        low = helper.next_low(future, threshold, fx_rate, vat_pct, grid_fee)
+        low = helper.next_low(forecast_points, period_avg_kwh, fx_rate, vat_pct, grid_fee)
         if low is not None:
             view["next_low"] = {
                 "start": low.start,
@@ -560,9 +565,7 @@ class EupowerpricesCoordinator(DataUpdateCoordinator):
             }
 
         if forecast_points:
-            avg_eur = sum(p.price_eur_mwh for p in forecast_points) / len(
-                forecast_points
-            )
+            avg_eur = period_avg_eur
             days_out = []
             for day, day_points in helper.group_by_local_date(
                 forecast_points, tz

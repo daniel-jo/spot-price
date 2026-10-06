@@ -202,7 +202,10 @@ async def async_setup_entry(
         return {
             "start": _iso(low["start"]) if "start" in low else None,
             "eur_mwh": low.get("eur_mwh"),
-            "threshold_kwh": data.get("threshold_kwh"),
+            "period_avg_kwh": data.get("period_avg_kwh"),
+            "period_days": data.get("forecast", {}).get("horizon_days")
+            if data.get("forecast")
+            else None,
         }
 
     def forecast_attrs(data: dict) -> dict:

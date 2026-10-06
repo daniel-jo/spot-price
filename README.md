@@ -61,7 +61,7 @@ and create a GitHub Release.
    optionally paste your eupowerprices **API key** (request it from the data
    provider; without a key the integration uses the public market API), and
    give the instance an optional name.
-6. **Options**: VAT %, grid fee, cheapest-window size, low-price threshold, FX
+6. **Options**: VAT %, grid fee, cheapest-window size, FX
    mode, forecast period and update interval — the currency and the API key can
    be changed here too.
 
@@ -81,7 +81,7 @@ configured zone (`<AREA>` → `sensor.spot_price_<AREA>_…`).
 | `tomorrow_minimum` / `_maximum` / `_average` | currency/kWh | same; accurate after ~13:00 |
 | `cheapest_window_today` | currency/kWh avg | best N consecutive **remaining** hours; `start`/`end` attrs |
 | `cheapest_window_tomorrow` | currency/kWh avg | best N consecutive hours of tomorrow |
-| `next_low_price` | currency/kWh | first hour ≤ configured threshold (else unavailable) |
+| `next_low_price` | currency/kWh | first upcoming hour ≤ the configured forecast period's average (else unavailable) |
 | `forecast` | currency/kWh avg | full configured period (default 14 days); compact `hours` (`[{s, p}]`: unix epoch, end-user price) + per-day `days` — under HA's 16 kB attribute limit |
 | `history` | currency/kWh avg | always-on last 24 h of realized prices; full hourly `hours` + min/max/avg in attributes |
 | `fx_rate` | `EUR/<currency>` | FX used (EUR→your currency) |
@@ -93,8 +93,7 @@ configured zone (`<AREA>` → `sensor.spot_price_<AREA>_…`).
   for the `start`/`end` attributes, toggle the device.
 - **Cheap-hour gating** — a 5-minute `time_pattern` automation switches devices
   only while `current_price` is below e.g. today's average (+margin).
-- **“Next low price” scheduling** — with a threshold configured, pre-arm longer
-  jobs for the hour given by the `start` attribute.
+- **“Next low price” scheduling** — the sensor goes `available` once a future hour is at/below the configured forecast period's average price; pre-arm longer jobs with the `start` attribute from the `next_low_price` entity.
 
 For the Energy dashboard, add `current_price` (~your-currency/kWh) as the grid price
 entity. If your dashboard requires EUR, add a template sensor

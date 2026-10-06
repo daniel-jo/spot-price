@@ -32,7 +32,7 @@
           "vat_pct": "Moms %",
           "grid_fee_kwh": "Nätavgift (per kWh, i din valuta)",
           "window_hours": "Billigaste fönster (timmar)",
-          "low_price_threshold_kwh": "Lågpriströskel (per kWh, i din valuta)",
+
           "update_interval_minutes": "Uppdateringsintervall (minuter)",
           "forecast_days": "Prognosperiod (dagar)"
         }

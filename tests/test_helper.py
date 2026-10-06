@@ -202,12 +202,24 @@ def test_lookup_current():
 
 def test_next_low():
     points = _pts([(13, 100.0), (14, 20.0), (15, 5.0)])
-    # threshold in the configured currency per kWh with fx=10, vat=0, fee=0:
+    # reference price in the configured currency per kWh with fx=10, vat=0, fee=0:
     #   14:00 -> 0.20 ; 15:00 -> 0.05
     low = helper.next_low(points, 0.10, 10.0, 0.0, 0.0)
     assert low is not None
     assert low.start.hour == 15
     assert helper.next_low(points, None, 10.0, 0.0, 0.0) is None
+
+
+def test_next_low_with_period_average_reference():
+    # hours 13/14/15 = 100/20/5 EUR/MWh; the average 41.67 EUR/MWh corresponds
+    # to ~0.4167 currency/kWh (fx=10, vat=0, fee=0). The first hour at/below
+    # that average is 14:00 (0.20/kWh).
+    points = _pts([(13, 100.0), (14, 20.0), (15, 5.0)])
+    avg_eur = sum(p.price_eur_mwh for p in points) / len(points)
+    avg_kwh = helper.to_price_per_kwh(avg_eur, 10.0, 0.0, 0.0)
+    low = helper.next_low(points, avg_kwh, 10.0, 0.0, 0.0)
+    assert low is not None
+    assert low.start.hour == 14
 
 
 def test_format_request_window_is_hour_aligned():

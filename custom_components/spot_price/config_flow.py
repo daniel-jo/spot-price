@@ -24,7 +24,6 @@ from .const import (
     CONF_FORECAST_DAYS,
     CONF_FX_MODE,
     CONF_GRID_FEE,
-    CONF_LOW_THRESHOLD,
     CONF_UPDATE_INTERVAL,
     CONF_VAT_PCT,
     CONF_WINDOW_HOURS,
@@ -34,7 +33,6 @@ from .const import (
     DEFAULT_FORECAST_DAYS,
     DEFAULT_FX_MODE,
     DEFAULT_GRID_FEE,
-    DEFAULT_LOW_THRESHOLD,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_VAT_PCT,
     DEFAULT_WINDOW_HOURS,
@@ -51,6 +49,14 @@ from .const import (
 
 # The API's area codes look like SE1–SE4, NO2, DK1, BE, AT, ... (2-6 chars).
 AREA_PATTERN = re.compile(r"^[A-Z][A-Z0-9]{1,5}$")
+
+
+def _num(value: Any, default: float) -> float:
+    """Coerce a stored option to float; fall back to `default` on None/empty."""
+    try:
+        return default if value in (None, "") else float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def normalize_area(value: Any) -> str:
@@ -269,7 +275,7 @@ class EupowerpricesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class EupowerpricesOptionsFlow(config_entries.OptionsFlow):
-    """Options: area, FX mode, VAT, grid fee, cheapest-window size, threshold."""
+    """Options: area, FX mode, VAT, grid fee, cheapest-window size, forecast period."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self._entry = config_entry
@@ -298,10 +304,6 @@ class EupowerpricesOptionsFlow(config_entries.OptionsFlow):
                 return self._show_form(current, {CONF_AREA: error})
             user_input[CONF_AREA] = area
             user_input[CONF_API_KEY] = api_key
-            threshold = user_input.get(CONF_LOW_THRESHOLD)
-            user_input[CONF_LOW_THRESHOLD] = (
-                None if threshold in (None, "") else float(threshold)
-            )
             user_input[CONF_FORECAST_DAYS] = _clamp_forecast_days(
                 user_input.get(CONF_FORECAST_DAYS)
             )
@@ -321,18 +323,11 @@ class EupowerpricesOptionsFlow(config_entries.OptionsFlow):
                 CONF_API_KEY, self._entry.data.get(CONF_API_KEY, "")
             ),
             CONF_FX_MODE: self._entry.options.get(CONF_FX_MODE, DEFAULT_FX_MODE),
-            CONF_FIXED_FX: self._entry.options.get(CONF_FIXED_FX, DEFAULT_FIXED_FX),
-            CONF_VAT_PCT: self._entry.options.get(CONF_VAT_PCT, DEFAULT_VAT_PCT),
-            CONF_GRID_FEE: self._entry.options.get(CONF_GRID_FEE, DEFAULT_GRID_FEE),
-            CONF_WINDOW_HOURS: self._entry.options.get(
-                CONF_WINDOW_HOURS, DEFAULT_WINDOW_HOURS
-            ),
-            CONF_LOW_THRESHOLD: self._entry.options.get(
-                CONF_LOW_THRESHOLD, DEFAULT_LOW_THRESHOLD
-            ),
-            CONF_UPDATE_INTERVAL: self._entry.options.get(
-                CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
-            ),
+            CONF_FIXED_FX: _num(self._entry.options.get(CONF_FIXED_FX), DEFAULT_FIXED_FX),
+            CONF_VAT_PCT: _num(self._entry.options.get(CONF_VAT_PCT), DEFAULT_VAT_PCT),
+            CONF_GRID_FEE: _num(self._entry.options.get(CONF_GRID_FEE), DEFAULT_GRID_FEE),
+            CONF_WINDOW_HOURS: _num(self._entry.options.get(CONF_WINDOW_HOURS), DEFAULT_WINDOW_HOURS),
+            CONF_UPDATE_INTERVAL: _num(self._entry.options.get(CONF_UPDATE_INTERVAL), DEFAULT_UPDATE_INTERVAL),
             CONF_FORECAST_DAYS: _clamp_forecast_days(
                 self._entry.options.get(CONF_FORECAST_DAYS)
             ),
@@ -404,11 +399,6 @@ class EupowerpricesOptionsFlow(config_entries.OptionsFlow):
                             "step": 1,
                         }
                     }
-                ),
-                vol.Optional(
-                    CONF_LOW_THRESHOLD, default=current[CONF_LOW_THRESHOLD]
-                ): selector.selector(
-                    {"number": {"mode": "box", "min": 0, "max": 20}}
                 ),
                 vol.Optional(
                     CONF_UPDATE_INTERVAL, default=current[CONF_UPDATE_INTERVAL]

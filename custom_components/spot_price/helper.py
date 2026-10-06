@@ -200,7 +200,7 @@ def next_low(
     vat_pct: float,
     grid_fee_per_kwh: float,
 ) -> Optional[PricePoint]:
-    """First upcoming hour whose end-user price (chosen currency) is <= threshold."""
+    """First upcoming hour whose end-user price (chosen currency) is <= the reference price (e.g. the configured period average)."""
     if threshold_per_kwh is None or not points:
         return None
     for point in points:

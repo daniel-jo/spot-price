@@ -25,7 +25,6 @@ CONF_FIXED_FX = "fixed_fx"
 CONF_VAT_PCT = "vat_pct"
 CONF_GRID_FEE = "grid_fee_kwh"
 CONF_WINDOW_HOURS = "window_hours"
-CONF_LOW_THRESHOLD = "low_price_threshold_kwh"
 CONF_UPDATE_INTERVAL = "update_interval_minutes"
 CONF_FORECAST_DAYS = "forecast_days"
 
@@ -40,7 +39,6 @@ DEFAULT_FIXED_FX = 1.0
 DEFAULT_VAT_PCT = 25.0
 DEFAULT_GRID_FEE = 0.0
 DEFAULT_WINDOW_HOURS = 3
-DEFAULT_LOW_THRESHOLD = None
 DEFAULT_UPDATE_INTERVAL = 60  # minutes between background refreshes (13:30-anchored)
 DEFAULT_FORECAST_DAYS = 14  # days of future prices to fetch and expose
 
