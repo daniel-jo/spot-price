@@ -45,36 +45,21 @@ from .const import (
     REQUEST_HEADERS,
     SUPPORTED_AREAS,
     SUPPORTED_CURRENCIES,
+    normalize_area,
+    _num,
+    _clamp_forecast_days,
 )
 
 # The API's area codes look like SE1–SE4, NO2, DK1, BE, AT, ... (2-6 chars).
 AREA_PATTERN = re.compile(r"^[A-Z][A-Z0-9]{1,5}$")
 
 
-def _num(value: Any, default: float) -> float:
-    """Coerce a stored option to float; fall back to `default` on None/empty."""
-    try:
-        return default if value in (None, "") else float(value)
-    except (TypeError, ValueError):
-        return default
 
 
-def normalize_area(value: Any) -> str:
-    """Trim and uppercase a user-entered area code."""
-    return str(value or "").strip().upper()
 
 
-def _clamp_forecast_days(value: Any, default: int = DEFAULT_FORECAST_DAYS) -> int:
-    """Coerce a forecast-period input to an int inside [MIN, MAX] days.
 
-    The eupowerprices forecast never extends beyond ~14 days (see const.py),
-    so anything larger is clamped to the ceiling instead of stored.
-    """
-    try:
-        days = int(round(float(value)))
-    except (TypeError, ValueError):
-        return default
-    return max(MIN_FORECAST_DAYS, min(MAX_FORECAST_DAYS, days))
+
 
 
 def _extract_area_codes(payload: Any) -> set[str]:
@@ -186,6 +171,118 @@ async def async_area_error(hass, area: str, api_key: str = "") -> Optional[str]:
     return None
 
 
+def _setup_current_values() -> dict[str, Any]:
+    """Default values used to pre-fill the setup form (no entry exists yet)."""
+    return {
+        CONF_AREA: DEFAULT_AREA,
+        CONF_CURRENCY: DEFAULT_CURRENCY,
+        CONF_NAME: "",
+        CONF_API_KEY: "",
+        CONF_FX_MODE: DEFAULT_FX_MODE,
+        CONF_FIXED_FX: DEFAULT_FIXED_FX,
+        CONF_VAT_PCT: DEFAULT_VAT_PCT,
+        CONF_GRID_FEE: DEFAULT_GRID_FEE,
+        CONF_WINDOW_HOURS: DEFAULT_WINDOW_HOURS,
+        CONF_UPDATE_INTERVAL: DEFAULT_UPDATE_INTERVAL,
+        CONF_FORECAST_DAYS: DEFAULT_FORECAST_DAYS,
+    }
+
+
+
+def _shared_schema(current: dict[str, Any], area_options: list[str]) -> vol.Schema:
+    """Build the config/options form schema from a single source of truth."""
+    return vol.Schema(
+        {
+            vol.Required(CONF_AREA, default=current.get(CONF_AREA, DEFAULT_AREA)): selector.selector(
+                {
+                    "select": {
+                        "options": area_options,
+                        "mode": "dropdown",
+                        "custom_value": True,
+                    }
+                }
+            ),
+            vol.Required(
+                CONF_CURRENCY, default=current.get(CONF_CURRENCY, DEFAULT_CURRENCY)
+            ): selector.selector(
+                {"select": {"options": SUPPORTED_CURRENCIES, "mode": "dropdown"}}
+            ),
+            vol.Optional(CONF_NAME, default=current.get(CONF_NAME, "")): selector.selector(
+                {"text": {"type": "text"}}
+            ),
+            vol.Optional(CONF_API_KEY, default=current.get(CONF_API_KEY, "")): selector.selector(
+                {"text": {"type": "password", "autocomplete": "off"}}
+            ),
+            vol.Optional(CONF_FX_MODE, default=current.get(CONF_FX_MODE, DEFAULT_FX_MODE)): selector.selector(
+                {"select": {"options": [FX_MODE_LIVE, FX_MODE_FIXED], "mode": "dropdown"}}
+            ),
+            vol.Optional(
+                CONF_FIXED_FX, default=current.get(CONF_FIXED_FX, DEFAULT_FIXED_FX)
+            ): selector.selector(
+                {"number": {"mode": "box", "min": 0, "max": 30, "step": 0.01}}
+            ),
+            vol.Optional(
+                CONF_VAT_PCT, default=current.get(CONF_VAT_PCT, DEFAULT_VAT_PCT)
+            ): selector.selector(
+                {"number": {"mode": "box", "min": 0, "max": 100, "step": 0.1}}
+            ),
+            vol.Optional(
+                CONF_GRID_FEE, default=current.get(CONF_GRID_FEE, DEFAULT_GRID_FEE)
+            ): selector.selector(
+                {"number": {"mode": "box", "min": 0, "max": 5, "step": 0.01}}
+            ),
+            vol.Optional(
+                CONF_WINDOW_HOURS,
+                default=current.get(CONF_WINDOW_HOURS, DEFAULT_WINDOW_HOURS),
+            ): selector.selector(
+                {"number": {"mode": "box", "min": 1, "max": 12, "step": 1}}
+            ),
+            vol.Optional(
+                CONF_UPDATE_INTERVAL,
+                default=current.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL),
+            ): selector.selector(
+                {"number": {"mode": "box", "min": 30, "max": 1440, "step": 30}}
+            ),
+            vol.Optional(
+                CONF_FORECAST_DAYS,
+                default=current.get(CONF_FORECAST_DAYS, DEFAULT_FORECAST_DAYS),
+            ): selector.selector(
+                {
+                    "number": {
+                        "mode": "box",
+                        "min": MIN_FORECAST_DAYS,
+                        "max": MAX_FORECAST_DAYS,
+                        "step": 1,
+                    }
+                }
+            ),
+        }
+    )
+
+
+
+def _normalize_config(
+    user_input: dict[str, Any], current: dict[str, Any]
+) -> dict[str, Any]:
+    """Merge user input over fallbacks and normalise every config value."""
+    config = dict(current)
+    config.update(user_input)
+    config[CONF_AREA] = normalize_area(config.get(CONF_AREA))
+    config[CONF_CURRENCY] = str(config.get(CONF_CURRENCY) or DEFAULT_CURRENCY).upper()
+    config[CONF_API_KEY] = str(config.get(CONF_API_KEY) or "").strip()
+    config[CONF_FX_MODE] = config.get(CONF_FX_MODE) or DEFAULT_FX_MODE
+    config[CONF_FIXED_FX] = _num(config.get(CONF_FIXED_FX), DEFAULT_FIXED_FX)
+    config[CONF_VAT_PCT] = _num(config.get(CONF_VAT_PCT), DEFAULT_VAT_PCT)
+    config[CONF_GRID_FEE] = _num(config.get(CONF_GRID_FEE), DEFAULT_GRID_FEE)
+    config[CONF_WINDOW_HOURS] = int(_num(config.get(CONF_WINDOW_HOURS), DEFAULT_WINDOW_HOURS))
+    config[CONF_UPDATE_INTERVAL] = int(
+        _num(config.get(CONF_UPDATE_INTERVAL), DEFAULT_UPDATE_INTERVAL)
+    )
+    config[CONF_FORECAST_DAYS] = _clamp_forecast_days(config.get(CONF_FORECAST_DAYS))
+    return config
+
+
+
 class EupowerpricesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle an initial configuration via the UI."""
 
@@ -201,70 +298,32 @@ class EupowerpricesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # against the keyed endpoints whenever a key is present.
             codes = await _async_fetch_area_codes(self.hass)
             self._area_options = area_options(codes)
+
         errors: dict[str, str] = {}
         if user_input is not None:
-            area = normalize_area(user_input.get(CONF_AREA))
-            api_key = str(user_input.get(CONF_API_KEY) or "").strip()
-            error = await async_area_error(self.hass, area, api_key)
+            config = _normalize_config(user_input, _setup_current_values())
+            area = config[CONF_AREA]
+            error = await async_area_error(self.hass, area, config.get(CONF_API_KEY, ""))
             if error is not None:
+                current = _setup_current_values()
+                current[CONF_AREA] = area
                 errors[CONF_AREA] = error
-            else:
-                return self.async_create_entry(
-                    title=str(user_input.get(CONF_NAME, "")).strip() or NAME,
-                    data={
-                        CONF_AREA: area,
-                        CONF_CURRENCY: user_input.get(CONF_CURRENCY, DEFAULT_CURRENCY),
-                        CONF_API_KEY: api_key,
-                        CONF_FORECAST_DAYS: _clamp_forecast_days(
-                            user_input.get(CONF_FORECAST_DAYS)
-                        ),
-                    },
+                return self.async_show_form(
+                    step_id="user",
+                    data_schema=self._shared_schema(current, self._area_options),
+                    errors=errors,
+                    last_step=True,
                 )
+            return self.async_create_entry(
+                title=str(config.get(CONF_NAME, "")).strip() or NAME,
+                data=config,
+            )
 
-        schema = vol.Schema(
-            {
-                # No preselection: the user must actively pick/type an area.
-                vol.Required(CONF_AREA): selector.selector(
-                    {
-                        "select": {
-                            "options": self._area_options,
-                            "mode": "dropdown",
-                            "custom_value": True,
-                        }
-                    }
-                ),
-                vol.Required(
-                    CONF_CURRENCY, default=DEFAULT_CURRENCY
-                ): selector.selector(
-                    {
-                        "select": {
-                            "options": SUPPORTED_CURRENCIES,
-                            "mode": "dropdown",
-                        }
-                    }
-                ),
-                vol.Optional(CONF_NAME, default=""): selector.selector(
-                    {"text": {"type": "text"}}
-                ),
-                vol.Optional(CONF_API_KEY, default=""): selector.selector(
-                    {"text": {"type": "password", "autocomplete": "off"}}
-                ),
-                vol.Optional(
-                    CONF_FORECAST_DAYS, default=DEFAULT_FORECAST_DAYS
-                ): selector.selector(
-                    {
-                        "number": {
-                            "mode": "box",
-                            "min": MIN_FORECAST_DAYS,
-                            "max": MAX_FORECAST_DAYS,
-                            "step": 1,
-                        }
-                    }
-                ),
-            }
-        )
         return self.async_show_form(
-            step_id="user", data_schema=schema, errors=errors, last_step=True
+            step_id="user",
+            data_schema=self._shared_schema(_setup_current_values(), self._area_options),
+            errors=errors,
+            last_step=True,
         )
 
     @staticmethod
@@ -294,21 +353,37 @@ class EupowerpricesOptionsFlow(config_entries.OptionsFlow):
             ).strip()
             codes = await _async_fetch_area_codes(self.hass, api_key)
             self._area_options = area_options(codes, keyed=bool(api_key))
+
+        errors: dict[str, str] = {}
         if user_input is not None:
-            area = normalize_area(user_input.get(CONF_AREA))
-            api_key = str(user_input.get(CONF_API_KEY) or "").strip()
-            error = await async_area_error(self.hass, area, api_key)
+            config = _normalize_config(user_input, self._current_values())
+            area = config[CONF_AREA]
+            error = await async_area_error(self.hass, area, config.get(CONF_API_KEY, ""))
             if error is not None:
                 current = self._current_values()
                 current[CONF_AREA] = area
-                return self._show_form(current, {CONF_AREA: error})
-            user_input[CONF_AREA] = area
-            user_input[CONF_API_KEY] = api_key
-            user_input[CONF_FORECAST_DAYS] = _clamp_forecast_days(
-                user_input.get(CONF_FORECAST_DAYS)
+                errors[CONF_AREA] = error
+                return self.async_show_form(
+                    step_id="init",
+                    data_schema=self._shared_schema(current, self._area_options),
+                    errors=errors,
+                    last_step=True,
+                )
+            # Reflect name changes in the config-entry title.
+            new_title = str(config.get(CONF_NAME, "")).strip() or NAME
+            if new_title != (self._entry.title or ""):
+                self.hass.config_entries.async_update_entry(self._entry, title=new_title)
+            return self.async_create_entry(
+                title="",
+                data=config,
             )
-            return self.async_create_entry(title="", data=user_input)
-        return self._show_form(self._current_values(), {})
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self._shared_schema(self._current_values(), self._area_options),
+            errors=errors,
+            last_step=True,
+        )
 
     def _current_values(self) -> dict[str, Any]:
         return {
@@ -319,6 +394,7 @@ class EupowerpricesOptionsFlow(config_entries.OptionsFlow):
                 CONF_CURRENCY,
                 self._entry.data.get(CONF_CURRENCY, DEFAULT_CURRENCY),
             ),
+            CONF_NAME: self._entry.title or "",
             CONF_API_KEY: self._entry.options.get(
                 CONF_API_KEY, self._entry.data.get(CONF_API_KEY, "")
             ),
@@ -328,85 +404,7 @@ class EupowerpricesOptionsFlow(config_entries.OptionsFlow):
             CONF_GRID_FEE: _num(self._entry.options.get(CONF_GRID_FEE), DEFAULT_GRID_FEE),
             CONF_WINDOW_HOURS: _num(self._entry.options.get(CONF_WINDOW_HOURS), DEFAULT_WINDOW_HOURS),
             CONF_UPDATE_INTERVAL: _num(self._entry.options.get(CONF_UPDATE_INTERVAL), DEFAULT_UPDATE_INTERVAL),
-            CONF_FORECAST_DAYS: _clamp_forecast_days(
-                self._entry.options.get(CONF_FORECAST_DAYS)
-            ),
+            CONF_FORECAST_DAYS: _clamp_forecast_days(self._entry.options.get(CONF_FORECAST_DAYS)),
         }
 
-    def _show_form(self, current: dict[str, Any], errors: dict[str, str]) -> FlowResult:
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_AREA, default=current[CONF_AREA]): selector.selector(
-                    {
-                        "select": {
-                            "options": self._area_options,
-                            "mode": "dropdown",
-                            "custom_value": True,
-                        }
-                    }
-                ),
-                vol.Required(
-                    CONF_CURRENCY, default=current[CONF_CURRENCY]
-                ): selector.selector(
-                    {
-                        "select": {
-                            "options": SUPPORTED_CURRENCIES,
-                            "mode": "dropdown",
-                        }
-                    }
-                ),
-                vol.Optional(CONF_API_KEY, default=current[CONF_API_KEY]): selector.selector(
-                    {"text": {"type": "password", "autocomplete": "off"}}
-                ),
-                vol.Required(
-                    CONF_FX_MODE, default=current[CONF_FX_MODE]
-                ): selector.selector(
-                    {
-                        "select": {
-                            "options": [FX_MODE_LIVE, FX_MODE_FIXED],
-                            "mode": "dropdown",
-                        }
-                    }
-                ),
-                vol.Optional(
-                    CONF_FIXED_FX, default=current[CONF_FIXED_FX]
-                ): selector.selector(
-                    {"number": {"mode": "box", "min": 0, "max": 30, "step": 0.01}}
-                ),
-                vol.Optional(
-                    CONF_VAT_PCT, default=current[CONF_VAT_PCT]
-                ): selector.selector(
-                    {"number": {"mode": "box", "min": 0, "max": 100, "step": 0.1}}
-                ),
-                vol.Optional(
-                    CONF_GRID_FEE, default=current[CONF_GRID_FEE]
-                ): selector.selector(
-                    {"number": {"mode": "box", "min": 0, "max": 5, "step": 0.01}}
-                ),
-                vol.Optional(
-                    CONF_WINDOW_HOURS, default=current[CONF_WINDOW_HOURS]
-                ): selector.selector(
-                    {"number": {"mode": "box", "min": 1, "max": 12, "step": 1}}
-                ),
-                vol.Optional(
-                    CONF_FORECAST_DAYS, default=current[CONF_FORECAST_DAYS]
-                ): selector.selector(
-                    {
-                        "number": {
-                            "mode": "box",
-                            "min": MIN_FORECAST_DAYS,
-                            "max": MAX_FORECAST_DAYS,
-                            "step": 1,
-                        }
-                    }
-                ),
-                vol.Optional(
-                    CONF_UPDATE_INTERVAL, default=current[CONF_UPDATE_INTERVAL]
-                ): selector.selector(
-                    {"number": {"mode": "box", "min": 30, "max": 1440, "step": 30}}
-                ),
-            }
-        )
-        return self.async_show_form(
-            step_id="init", data_schema=schema, errors=errors, last_step=True
-        )
+

@@ -60,10 +60,11 @@ and create a GitHub Release.
    pick your **currency** (default EUR; the list follows the areas' countries),
    optionally paste your eupowerprices **API key** (request it from the data
    provider; without a key the integration uses the public market API), and
-   give the instance an optional name.
+   give the instance an optional name. The **same** FX/VAT/grid-fee/window/interval
+   settings can also be entered here, and both places stay in sync.
 6. **Options**: VAT %, grid fee, cheapest-window size, FX
-   mode, forecast period and update interval — the currency and the API key can
-   be changed here too.
+   mode, forecast period and update interval — these mirror the setup
+   form — and its currency and API key can be changed again here too.
 
 Updates arrive as HACS update notifications whenever a new release is tagged
 in this repository.

@@ -29,7 +29,6 @@ from .const import (
     CONF_FORECAST_DAYS,
     CONF_FX_MODE,
     CONF_GRID_FEE,
-    CONF_LOW_THRESHOLD,
     CONF_UPDATE_INTERVAL,
     CONF_VAT_PCT,
     CONF_WINDOW_HOURS,
@@ -39,7 +38,6 @@ from .const import (
     DEFAULT_FORECAST_DAYS,
     DEFAULT_FX_MODE,
     DEFAULT_GRID_FEE,
-    DEFAULT_LOW_THRESHOLD,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_VAT_PCT,
     DEFAULT_WINDOW_HOURS,
@@ -64,7 +62,13 @@ _TIMEOUT_SECONDS = 30
 
 
 def resolve_options(entry: ConfigEntry) -> dict:
-    """Resolve effective options from the config entry (data takes area)."""
+    """Resolve effective options from the config entry (options win over data).
+
+    ``ConfigEntry.data`` holds the values the integration was first set up with,
+    and ``ConfigEntry.options`` holds user edits made through the Options flow.
+    Both are merged so that a value entered during setup is honoured if never
+    touched again, while anything changed in the Options flow wins.
+    """
     options = {
         CONF_AREA: DEFAULT_AREA,
         CONF_CURRENCY: DEFAULT_CURRENCY,
@@ -73,22 +77,27 @@ def resolve_options(entry: ConfigEntry) -> dict:
         CONF_VAT_PCT: DEFAULT_VAT_PCT,
         CONF_GRID_FEE: DEFAULT_GRID_FEE,
         CONF_WINDOW_HOURS: DEFAULT_WINDOW_HOURS,
-        CONF_LOW_THRESHOLD: DEFAULT_LOW_THRESHOLD,
         CONF_UPDATE_INTERVAL: DEFAULT_UPDATE_INTERVAL,
         CONF_FORECAST_DAYS: DEFAULT_FORECAST_DAYS,
     }
     options.update(entry.options)
-    options[CONF_AREA] = entry.data.get(CONF_AREA, options.get(CONF_AREA, DEFAULT_AREA))
-    options[CONF_CURRENCY] = entry.data.get(
-        CONF_CURRENCY, options.get(CONF_CURRENCY, DEFAULT_CURRENCY)
+    options.update(entry.data)
+    options[CONF_AREA] = normalize_area(options.get(CONF_AREA))
+    options[CONF_CURRENCY] = (
+        str(options.get(CONF_CURRENCY) or DEFAULT_CURRENCY).upper()
     )
-    options[CONF_API_KEY] = str(
-        options.get(CONF_API_KEY) or entry.data.get(CONF_API_KEY) or ""
-    ).strip()
-    if CONF_FORECAST_DAYS not in options:
-        options[CONF_FORECAST_DAYS] = entry.data.get(
-            CONF_FORECAST_DAYS, DEFAULT_FORECAST_DAYS
-        )
+    options[CONF_API_KEY] = str(options.get(CONF_API_KEY) or "").strip()
+    options[CONF_FX_MODE] = options.get(CONF_FX_MODE) or DEFAULT_FX_MODE
+    options[CONF_FIXED_FX] = _num(options.get(CONF_FIXED_FX), DEFAULT_FIXED_FX)
+    options[CONF_VAT_PCT] = _num(options.get(CONF_VAT_PCT), DEFAULT_VAT_PCT)
+    options[CONF_GRID_FEE] = _num(options.get(CONF_GRID_FEE), DEFAULT_GRID_FEE)
+    options[CONF_WINDOW_HOURS] = int(_num(options.get(CONF_WINDOW_HOURS), DEFAULT_WINDOW_HOURS))
+    options[CONF_UPDATE_INTERVAL] = int(
+        _num(options.get(CONF_UPDATE_INTERVAL), DEFAULT_UPDATE_INTERVAL)
+    )
+    options[CONF_FORECAST_DAYS] = _clamp_forecast_days(
+        options.get(CONF_FORECAST_DAYS, DEFAULT_FORECAST_DAYS)
+    )
     return options
 
 

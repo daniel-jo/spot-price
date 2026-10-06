@@ -1,4 +1,5 @@
 """Constants for the Spot Price custom integration."""
+from typing import Any
 
 DOMAIN = "spot_price"
 NAME = "Spot Price"
@@ -123,6 +124,28 @@ def unit_price_per_kwh(currency: str) -> str:
 def unit_eur_to(currency: str) -> str:
     """Unit string for the EUR->currency FX rate sensor."""
     return f"EUR/{currency}"
+
+
+def normalize_area(value: Any) -> str:
+    """Trim and uppercase a user-entered area code."""
+    return str(value or "").strip().upper()
+
+
+def _num(value: Any, default: float) -> float:
+    """Coerce a stored option to float; fall back to `default` on None/empty."""
+    try:
+        return default if value in (None, "") else float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _clamp_forecast_days(value: Any, default: int = DEFAULT_FORECAST_DAYS) -> int:
+    """Coerce a forecast-period input to an int inside [MIN, MAX] days."""
+    try:
+        days = int(round(float(value)))
+    except (TypeError, ValueError):
+        return default
+    return max(MIN_FORECAST_DAYS, min(MAX_FORECAST_DAYS, days))
 
 # --- HTTP -------------------------------------------------------------------
 # Browser-like request headers. The eupowerprices site is fronted by

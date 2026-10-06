@@ -9,6 +9,12 @@
           "currency": "Currency",
           "name": "Name (optional)",
           "api_key": "API key (optional)",
+          "fx_mode": "FX rate mode",
+          "fixed_fx": "Fixed EUR→your-currency rate",
+          "vat_pct": "VAT %",
+          "grid_fee_kwh": "Grid fee (per kWh, in your currency)",
+          "window_hours": "Cheapest window (hours)",
+          "update_interval_minutes": "Update interval (minutes)",
           "forecast_days": "Forecast period (days)"
         }
       }
@@ -26,13 +32,13 @@
         "data": {
           "area": "Area / bidding zone",
           "currency": "Currency",
+          "name": "Name (optional)",
           "api_key": "API key (empty = public API)",
           "fx_mode": "FX rate mode",
           "fixed_fx": "Fixed EUR→your-currency rate",
           "vat_pct": "VAT %",
           "grid_fee_kwh": "Grid fee (per kWh, in your currency)",
           "window_hours": "Cheapest window (hours)",
-
           "update_interval_minutes": "Update interval (minutes)",
           "forecast_days": "Forecast period (days)"
         }

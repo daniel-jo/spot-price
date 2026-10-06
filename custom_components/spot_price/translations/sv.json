@@ -9,6 +9,12 @@
           "currency": "Valuta",
           "name": "Namn (valfritt)",
           "api_key": "API-nyckel (valfritt)",
+          "fx_mode": "Valutakursläge",
+          "fixed_fx": "Fast EUR→kurs (din valuta)",
+          "vat_pct": "Moms %",
+          "grid_fee_kwh": "Nätavgift (per kWh, i din valuta)",
+          "window_hours": "Billigaste fönster (timmar)",
+          "update_interval_minutes": "Uppdateringsintervall (minuter)",
           "forecast_days": "Prognosperiod (dagar)"
         }
       }
@@ -26,13 +32,13 @@
         "data": {
           "area": "Elområde",
           "currency": "Valuta",
+          "name": "Namn (valfritt)",
           "api_key": "API-nyckel (tom = publik API)",
           "fx_mode": "Valutakursläge",
           "fixed_fx": "Fast EUR→kurs (din valuta)",
           "vat_pct": "Moms %",
           "grid_fee_kwh": "Nätavgift (per kWh, i din valuta)",
           "window_hours": "Billigaste fönster (timmar)",
-
           "update_interval_minutes": "Uppdateringsintervall (minuter)",
           "forecast_days": "Prognosperiod (dagar)"
         }
