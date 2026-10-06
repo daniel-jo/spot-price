@@ -102,6 +102,31 @@ def test_share_schema_defined_once():
         and node.name == "_shared_schema"
     )
     assert count == 1
+def test_shared_schema_never_called_on_self():
+    """`_shared_schema` (and friends) are module-level, so `self._shared_schema`
+    would raise AttributeError the moment HA renders the form, surfacing as a
+    "Config flow could not be loaded: 500 Internal Server Error". Catch that
+    statically here, since py_compile/pytest never execute the flow.
+    """
+    tree = ast.parse(open(CONFIG_FLOW_PATH).read())
+    module_level = {
+        node.name
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    offenders = sorted(
+        {
+            node.attr
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Attribute) and node.attr in module_level
+        }
+    )
+    assert not offenders, (
+        "Module-level helpers called as methods (AttributeError at runtime): "
+        + ", ".join(offenders)
+    )
+
+
 if __name__ == "__main__":
     import sys
     import traceback

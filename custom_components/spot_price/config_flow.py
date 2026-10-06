@@ -310,7 +310,7 @@ class EupowerpricesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors[CONF_AREA] = error
                 return self.async_show_form(
                     step_id="user",
-                    data_schema=self._shared_schema(current, self._area_options),
+                    data_schema=_shared_schema(current, self._area_options),
                     errors=errors,
                     last_step=True,
                 )
@@ -321,7 +321,7 @@ class EupowerpricesConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=self._shared_schema(_setup_current_values(), self._area_options),
+            data_schema=_shared_schema(_setup_current_values(), self._area_options),
             errors=errors,
             last_step=True,
         )
@@ -365,7 +365,7 @@ class EupowerpricesOptionsFlow(config_entries.OptionsFlow):
                 errors[CONF_AREA] = error
                 return self.async_show_form(
                     step_id="init",
-                    data_schema=self._shared_schema(current, self._area_options),
+                    data_schema=_shared_schema(current, self._area_options),
                     errors=errors,
                     last_step=True,
                 )
@@ -380,7 +380,7 @@ class EupowerpricesOptionsFlow(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="init",
-            data_schema=self._shared_schema(self._current_values(), self._area_options),
+            data_schema=_shared_schema(self._current_values(), self._area_options),
             errors=errors,
             last_step=True,
         )
