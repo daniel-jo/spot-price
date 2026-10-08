@@ -11,27 +11,28 @@ tags pushed to this repo (`v<version>`).
   state-changing commands (including `git`).
 - Stop after presenting the plan and wait for the user to switch to **act
   mode** before making changes.
-- Read-only inspection and validation (reads, searches, `pytest`,
-  `node --check`) are fine in plan mode; anything that writes is not.
+- Read-only inspection and validation (reads, searches, `pytest`) are fine in
+  plan mode; anything that writes is not.
 
 ## Layout
 
 ```
 custom_components/spot_price/    # the HA integration
-├── __init__.py                  # platform setup & Lovelace card serving
+├── __init__.py                  # platform setup
 ├── config_flow.py               # setup UI & options flow
 ├── const.py                     # constants, area/currency tables
 ├── coordinator.py               # data fetching, caching, view construction
 ├── helper.py                    # pure logic (parsing, grouping, windowing)
 ├── sensor.py                    # sensor entities
-├── frontend/spot-price-card.js  # bundled Lovelace dashboard card
 ├── translations/                # localised strings (en.json, sv.json)
 ├── strings.json                 # config-flow translation placeholders
 ├── manifest.json                # HA/HACS metadata
 dryrun.py                        # standalone live API check (pure stdlib)
 tests/
 ├── test_helper.py               # unit tests for helper.py (pytest)
-└── test_frontend.py             # layout/wiring tests for the card
+├── test_config_flow.py          # guards the shared setup/options schema
+├── test_const_imports.py        # guards const import/helper references
+└── test_manifest.py             # manifest purity + version sync
 examples/automations-electricity.yaml
 .env.example                     # dry-run API key template
 hacs.json                        # HACS metadata
@@ -42,7 +43,6 @@ README.md
 
 - Tests: `python3 -m pytest tests/ -v`
 - Run tests standalone (no pytest): `python3 tests/test_helper.py`
-- Validate the bundled JS card: `node --check custom_components/spot_price/frontend/spot-price-card.js`
 - Dry-run against the live API:
   `python3 dryrun.py --area SE1 --vat 25 --grid-fee 0.30 --window 3`
 
@@ -91,11 +91,6 @@ README.md
 - Pricing formula: `price/kWh = (EUR/MWh × FX ÷ 1000) × (1 + VAT) + grid fee`,
   where `FX` is the EUR → configured-currency rate; the configured currency
   (default EUR) is a config option and sensor units/attributes follow it.
-- Bundled dashboard card: the card must stay at
-  `custom_components/spot_price/frontend/spot-price-card.js`, be served by
-  `__init__.py` at `/spot_price/spot-price-card.js` (via
-  `hass.http.register_static_path`), and keep the registered custom element
-  name `spot-price-card`.
 
 ## API etiquette
 

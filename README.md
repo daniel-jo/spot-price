@@ -103,39 +103,9 @@ with unit `EUR/kWh` and use that.
 
 ### Charting future prices
 
-The integration ships a **built-in `spot-price-card`** Lovelace card that draws
-today's elapsed hours, the running hour and the whole configured forecast as a
-line chart (no area fill), with a vertical "now" marker, an average line,
-cheap-hour dots, hover details and the unit along the y-axis. The line is
-**solid yellow** for the official day-ahead hours (today + tomorrow,
-"Actual") and **dashed yellow** beyond that ("Forecast"). The current price
-and average are shown in the header; all card text is English (overridable
-via `labels`).
-
-1. After installing/updating, **restart Home Assistant**, then add the card
-   script as a dashboard resource:
-   **Settings → Dashboards → ⋯ (top right) → Resources → Add resource** with
-   URL `/spot_price/spot-price-card.js` and type **JavaScript module**.
-2. Add a card on any dashboard:
-
-```yaml
-type: custom:spot-price-card
-entity: sensor.spot_price_SE3_forecast  # optional – auto-detected
-title: Elpris                             # optional
-show_past: true                           # include today's elapsed hours
-threshold: 1.0                            # optional: mark cheap hours green
-```
-
-Options: `entity` (auto-detected when omitted), `title`, `show_past` (default
-`true`), `height` (px, default 280), `threshold` (hours at/below this price get
-a green dot on the line), `show_avg_line` / `show_legend` (default `true`),
-and `labels` (override the English UI strings, e.g. `actual`, `forecast`,
-`now_price`).
-
-#### Alternative: any chart card (e.g. ApexCharts)
-
-You can equally chart the `forecast` sensor's `hours` attribute with any
-third-party chart card (e.g. **ApexCharts**):
+Chart the `forecast` sensor's `hours` attribute with a third-party chart card —
+**[ApexCharts](https://github.com/romrider/apexcharts-card)** (install it via
+HACS as a frontend card):
 
 ```yaml
 type: custom:apexcharts-card
